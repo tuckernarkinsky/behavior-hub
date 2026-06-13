@@ -3,9 +3,10 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import {
-  ArrowLeft, Plus, Minus, Mic, MicOff, Sparkles, FileText, FolderOpen,
-  ClipboardList, Activity, ChevronRight, Clock, TrendingUp, Loader2,
-  BookOpen, Brain, Undo2, FileSignature, Calendar, Check, X, ChevronDown
+  ArrowLeft, Plus, Minus, Mic, MicOff, Sparkles, FileText,
+  ClipboardList, Activity, ChevronRight, TrendingUp, Loader2,
+  BookOpen, Brain, Undo2, FileSignature, Calendar, Check, X,
+  ChevronDown, RotateCcw,
 } from "lucide-react";
 
 const c = {
@@ -28,7 +29,6 @@ const CLIENTS = [
   { id: "c3", name: "Mateo S.", age: 8, color: c.gold, programs: 6, behaviors: 4, last: "Today" },
 ];
 
-// Leaves with a `group` collapse under that group header; leaves without one stand alone.
 const PROGRAM_TEMPLATE = [
   { id: "p1", name: "Simple compliance", prompt: "Independent", domain: "Compliance" },
   { id: "p2a", name: "Gross motor", prompt: "Model prompt", group: "Motor imitation" },
@@ -75,6 +75,28 @@ const PROTOCOLS = {
   c3: [{ title: "Tolerance for waiting", body: "Sample protocol for Mateo." }],
 };
 
+// ---------------- localStorage helpers ----------------
+const SESSION_KEY = (id) => `bh_session_${id}`;
+
+function loadSession(id) {
+  try {
+    const raw = typeof window !== "undefined" ? localStorage.getItem(SESSION_KEY(id)) : null;
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function saveSession(id, data) {
+  try { localStorage.setItem(SESSION_KEY(id), JSON.stringify(data)); } catch {}
+}
+
+function clearSession(id) {
+  try { localStorage.removeItem(SESSION_KEY(id)); } catch {}
+}
+
+function clearAllSessions() {
+  CLIENTS.forEach((cl) => clearSession(cl.id));
+}
+
 // ---------------- Speech helper ----------------
 function useDictation() {
   const [listening, setListening] = useState(false);
@@ -97,19 +119,31 @@ function useDictation() {
 }
 
 async function askClaude(prompt) {
-  const res = await fetch("/api/claude", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "AI request failed");
-  return data.text || "";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 35000);
+  try {
+    const res = await fetch("/api/claude", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+      signal: controller.signal,
+    });
+    let data = {};
+    try { data = await res.json(); } catch { /* non-JSON response */ }
+    if (!res.ok) throw new Error(data.error || "AI request failed");
+    return data.text || "";
+  } catch (e) {
+    if (e && e.name === "AbortError") throw new Error("The AI took too long to respond. Check your connection and try again.");
+    if (e instanceof TypeError) throw new Error("Couldn't reach the server. Check your connection and try again.");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ================= APP =================
 export default function BehaviorHubRBT() {
-  const [view, setView] = useState("roster"); // roster | client | session
+  const [view, setView] = useState("roster");
   const [client, setClient] = useState(null);
 
   return (
@@ -130,9 +164,27 @@ export default function BehaviorHubRBT() {
 
 // ---------------- Roster ----------------
 function Roster({ onOpen }) {
+  const [resetFlash, setResetFlash] = useState(false);
+
+  const handleReset = () => {
+    clearAllSessions();
+    setResetFlash(true);
+    setTimeout(() => setResetFlash(false), 1800);
+  };
+
   return (
     <div>
-      <Header title="My clients" subtitle="Tap a client to open their hub" icon={ClipboardList} />
+      <div className="flex items-start justify-between gap-2">
+        <Header title="My clients" subtitle="Tap a client to open their hub" icon={ClipboardList} />
+        <button
+          onClick={handleReset}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs shrink-0 mt-0.5 transition-all"
+          style={{ background: resetFlash ? c.primarySoft : c.bg, color: resetFlash ? c.primary : c.muted, fontWeight: 600, border: `1px solid ${c.line}` }}
+        >
+          <RotateCcw size={12} />
+          {resetFlash ? "Demo reset!" : "Reset demo"}
+        </button>
+      </div>
       <div className="grid gap-3 mt-4">
         {CLIENTS.map((cl) => (
           <button key={cl.id} onClick={() => onOpen(cl)}
@@ -156,9 +208,10 @@ function Roster({ onOpen }) {
 // ---------------- Client Hub ----------------
 function ClientHub({ client, onBack, onStart }) {
   const [tab, setTab] = useState("session");
+  const hasActiveSession = !!loadSession(client.id);
   const tabs = [
     { k: "session", label: "Session", icon: Activity },
-    { k: "history", label: "Data history", icon: TrendingUp },
+    { k: "history", label: "History", icon: TrendingUp },
     { k: "docs", label: "Documents", icon: FileText },
     { k: "protocols", label: "Protocols", icon: BookOpen },
   ];
@@ -181,18 +234,28 @@ function ClientHub({ client, onBack, onStart }) {
         {tab === "session" && (
           <Card>
             <Label icon={Calendar}>Today's session</Label>
+            {hasActiveSession && (
+              <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-xl text-xs" style={{ background: c.accentSoft, color: c.accent, fontWeight: 600 }}>
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c.accent }} />
+                In-progress session restored — your data is safe.
+              </div>
+            )}
             <p className="text-sm mt-2 mb-4" style={{ color: c.muted }}>
-              Start a new data-collection session for {client.name}. Skills and behaviors are collected on separate pages with a live AI assistant.
+              {hasActiveSession
+                ? `Continue your in-progress session for ${client.name}.`
+                : `Start a new data-collection session for ${client.name}. Skills and behaviors are collected on separate tabs with a live AI assistant.`}
             </p>
             <button onClick={onStart} className="w-full py-3 rounded-xl font-display text-base transition-transform active:scale-95"
               style={{ background: c.primary, color: "#fff", fontWeight: 700 }}>
-              Start session →
+              {hasActiveSession ? "Continue session →" : "Start session →"}
             </button>
           </Card>
         )}
         {tab === "history" && (
           <div className="grid gap-2.5">
-            {(PAST_SESSIONS[client.id] || []).map((s, i) => (
+            {(PAST_SESSIONS[client.id] || []).length === 0 ? (
+              <EmptyState icon={TrendingUp} message="No past sessions recorded yet." />
+            ) : (PAST_SESSIONS[client.id] || []).map((s, i) => (
               <Card key={i}>
                 <div className="flex items-center justify-between">
                   <div>
@@ -212,7 +275,9 @@ function ClientHub({ client, onBack, onStart }) {
         )}
         {tab === "docs" && (
           <div className="grid gap-2.5">
-            {(DOCUMENTS[client.id] || []).map((d, i) => (
+            {(DOCUMENTS[client.id] || []).length === 0 ? (
+              <EmptyState icon={FileText} message="No documents on file yet." />
+            ) : (DOCUMENTS[client.id] || []).map((d, i) => (
               <Card key={i}>
                 <div className="flex items-center gap-2 mb-1">
                   <FileText size={15} style={{ color: c.primary }} />
@@ -226,7 +291,9 @@ function ClientHub({ client, onBack, onStart }) {
         )}
         {tab === "protocols" && (
           <div className="grid gap-2.5">
-            {(PROTOCOLS[client.id] || []).map((p, i) => (
+            {(PROTOCOLS[client.id] || []).length === 0 ? (
+              <EmptyState icon={BookOpen} message="No protocols on file yet." />
+            ) : (PROTOCOLS[client.id] || []).map((p, i) => (
               <Card key={i}>
                 <div className="flex items-center gap-2 mb-2">
                   <BookOpen size={15} style={{ color: c.primary }} />
@@ -245,14 +312,32 @@ function ClientHub({ client, onBack, onStart }) {
 // ---------------- Live Session ----------------
 function LiveSession({ client, onExit }) {
   const [tab, setTab] = useState("skills");
-  const [programs, setPrograms] = useState(PROGRAM_TEMPLATE.map((p) => ({ ...p, trials: [] })));
-  const [behaviors, setBehaviors] = useState(BEHAVIOR_TEMPLATE.map((b) => ({ ...b, count: 0 })));
-  const [abc, setAbc] = useState([]);
-  const [notes, setNotes] = useState([]); // {text, time}
-  const [secs, setSecs] = useState(0);
+
+  // Initialise from localStorage if a session was in progress
+  const [programs, setPrograms] = useState(() => {
+    const saved = loadSession(client.id);
+    return saved?.programs ?? PROGRAM_TEMPLATE.map((p) => ({ ...p, trials: [] }));
+  });
+  const [behaviors, setBehaviors] = useState(() => {
+    const saved = loadSession(client.id);
+    return saved?.behaviors ?? BEHAVIOR_TEMPLATE.map((b) => ({ ...b, count: 0 }));
+  });
+  const [abc, setAbc] = useState(() => loadSession(client.id)?.abc ?? []);
+  const [notes, setNotes] = useState(() => loadSession(client.id)?.notes ?? []);
+  const [secs, setSecs] = useState(() => loadSession(client.id)?.secs ?? 0);
   const [ending, setEnding] = useState(false);
 
-  useEffect(() => { const t = setInterval(() => setSecs((s) => s + 1), 1000); return () => clearInterval(t); }, []);
+  // Tick the timer
+  useEffect(() => {
+    const t = setInterval(() => setSecs((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Persist session state whenever anything changes
+  useEffect(() => {
+    saveSession(client.id, { programs, behaviors, abc, notes, secs });
+  }, [programs, behaviors, abc, notes, secs]);
+
   const mm = String(Math.floor(secs / 60)).padStart(2, "0");
   const ss = String(secs % 60).padStart(2, "0");
 
@@ -261,6 +346,10 @@ function LiveSession({ client, onExit }) {
   const bump = (bid, d) => setBehaviors((bs) => bs.map((b) => b.id === bid ? { ...b, count: Math.max(0, b.count + d) } : b));
   const addAbc = (ev) => setAbc((a) => [{ ...ev, time: now() }, ...a]);
   const addNote = (text) => setNotes((n) => [...n, { text, time: now() }]);
+
+  // Clear persisted state when leaving the session intentionally
+  const handleExit = () => { clearSession(client.id); onExit(); };
+  const handleDone = () => { clearSession(client.id); onExit(); };
 
   const tabs = [
     { k: "skills", label: "Skills", icon: ClipboardList },
@@ -272,7 +361,7 @@ function LiveSession({ client, onExit }) {
     <div>
       {/* Session header */}
       <div className="flex items-center justify-between gap-3 sticky top-0 z-10 py-2" style={{ background: c.bg }}>
-        <button onClick={onExit} className="flex items-center gap-1 text-sm" style={{ color: c.muted, fontWeight: 600 }}>
+        <button onClick={handleExit} className="flex items-center gap-1 text-sm" style={{ color: c.muted, fontWeight: 600 }}>
           <ArrowLeft size={16} /> Exit
         </button>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm" style={{ background: c.accentSoft, color: c.accent, fontWeight: 700 }}>
@@ -296,13 +385,13 @@ function LiveSession({ client, onExit }) {
 
       {ending && (
         <EndSessionModal client={client} duration={`${mm}:${ss}`} programs={programs} behaviors={behaviors} abc={abc} notes={notes}
-          onClose={() => setEnding(false)} onDone={onExit} />
+          onClose={() => setEnding(false)} onDone={handleDone} />
       )}
     </div>
   );
 }
 
-// ---- Skills page (probes scored + / −, with collapsible subsections) ----
+// ---- Skills page ----
 function pct(trials) { return trials.length ? Math.round(trials.filter((t) => t === "+").length / trials.length * 100) : null; }
 function pctColor(v) { return v >= 80 ? c.plus : v >= 50 ? c.gold : c.minus; }
 
@@ -459,12 +548,15 @@ function BehaviorsPage({ behaviors, onBump, abc, onAddAbc }) {
   );
 }
 
-// ---- AI Notes page (live translation of log data) ----
+// ---- AI Notes page ----
 function AINotesPage({ client, programs, behaviors, abc, notes, onAddNote }) {
   const [draft, setDraft] = useState("");
   const [summary, setSummary] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const dict = useDictation();
+
+  const hasData = programs.some((p) => p.trials.length) || behaviors.some((b) => b.count) || abc.length > 0 || notes.length > 0;
 
   const dataContext = () => {
     const skills = programs.filter((p) => p.trials.length).map((p) => `${p.group ? p.group + " – " : ""}${p.name} (${p.prompt}): ${p.trials.join(" ")} = ${Math.round(p.trials.filter((t) => t === "+").length / p.trials.length * 100)}%`).join("; ");
@@ -476,12 +568,13 @@ function AINotesPage({ client, programs, behaviors, abc, notes, onAddNote }) {
 
   const generate = async () => {
     setBusy(true);
+    setError("");
     try {
       const out = await askClaude(
         `You are an ABA clinical documentation assistant. Translate this in-progress session's raw data into a concise running clinical narrative (3-5 sentences) in professional ABA language. Weave in the extra detail from the technician's quick notes. Be strictly factual — do not invent data not present. Session data:\n${dataContext()}`
       );
       setSummary(out.trim());
-    } catch { setSummary("Could not generate summary right now. Try again."); }
+    } catch (e) { setError(e instanceof Error ? e.message : "Couldn't generate the summary right now."); }
     finally { setBusy(false); }
   };
 
@@ -510,14 +603,27 @@ function AINotesPage({ client, programs, behaviors, abc, notes, onAddNote }) {
       <Card>
         <div className="flex items-center justify-between">
           <Label icon={Sparkles}>Live clinical summary</Label>
-          <button onClick={generate} disabled={busy} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm transition-transform active:scale-95" style={{ background: c.primary, color: "#fff", fontWeight: 600 }}>
+          <button onClick={generate} disabled={busy || !hasData} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm transition-transform active:scale-95" style={{ background: hasData ? c.primary : c.line, color: "#fff", fontWeight: 600, opacity: busy ? 0.7 : 1 }}>
             {busy ? <><Loader2 size={14} className="animate-spin" /> Translating…</> : <><Sparkles size={14} /> {summary ? "Regenerate" : "Generate"}</>}
           </button>
         </div>
+        {error && (
+          <div className="flex items-center justify-between gap-3 text-sm mt-3 p-3 rounded-xl" style={{ background: c.accentSoft, color: c.accent }}>
+            <span>{error}</span>
+            <button onClick={generate} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs shrink-0" style={{ background: c.accent, color: "#fff", fontWeight: 700 }}>Retry</button>
+          </div>
+        )}
         {summary ? (
           <p className="text-sm leading-relaxed mt-3 p-3 rounded-xl" style={{ background: c.primarySoft }}>{summary}</p>
-        ) : (
-          <p className="text-sm mt-3" style={{ color: c.muted }}>AI reads your +/− probe data, behavior counts, ABCs, and notes, then crafts a clinical narrative — pulling out detail you mentioned but didn't formally log.</p>
+        ) : !error && (
+          !hasData ? (
+            <div className="flex flex-col items-center text-center py-6 gap-2" style={{ color: c.muted }}>
+              <Brain size={30} style={{ opacity: 0.3 }} />
+              <p className="text-sm">Score trials or log a behavior first — then Generate will write a clinical narrative from your data.</p>
+            </div>
+          ) : (
+            <p className="text-sm mt-3" style={{ color: c.muted }}>AI reads your +/− probe data, behavior counts, ABCs, and notes, then crafts a clinical narrative — pulling out detail you mentioned but didn't formally log.</p>
+          )
         )}
       </Card>
     </div>
@@ -529,9 +635,11 @@ function EndSessionModal({ client, duration, programs, behaviors, abc, notes, on
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [drafted, setDrafted] = useState(false);
+  const [error, setError] = useState("");
 
   const draft = async () => {
     setBusy(true);
+    setError("");
     const skills = programs.filter((p) => p.trials.length).map((p) => `${p.group ? p.group + " – " : ""}${p.name} (${p.prompt}): ${Math.round(p.trials.filter((t) => t === "+").length / p.trials.length * 100)}% independent over ${p.trials.length} trials`).join("\n");
     const beh = behaviors.filter((b) => b.count).map((b) => `${b.name}: ${b.count}`).join(", ");
     const abcs = abc.map((e) => `${e.behavior} (antecedent: ${e.antecedent}; consequence: ${e.consequence}; function: ${e.function})`).join("; ");
@@ -543,7 +651,7 @@ DATA — Client: ${client.name}; Session duration: ${duration}; Service: direct 
 Programs:\n${skills || "none recorded"}\nBehavior frequencies: ${beh || "none"}\nABC events: ${abcs || "none"}\nTechnician notes: ${ns || "none"}`
       );
       setNote(out.trim()); setDrafted(true);
-    } catch { setNote("Could not draft the note. Please try again."); setDrafted(true); }
+    } catch (e) { setError(e instanceof Error ? e.message : "Couldn't draft the note right now."); }
     finally { setBusy(false); }
   };
 
@@ -569,9 +677,12 @@ Programs:\n${skills || "none recorded"}\nBehavior frequencies: ${beh || "none"}\
           <Recap label="Behaviors" value={behTotal} />
         </div>
 
+        {error && (
+          <div className="text-sm mt-4 p-3 rounded-xl" style={{ background: c.accentSoft, color: c.accent }}>{error}</div>
+        )}
         {!drafted ? (
           <button onClick={draft} disabled={busy} className="w-full mt-4 flex items-center justify-center gap-2 py-3 rounded-xl font-display text-base transition-transform active:scale-95" style={{ background: c.primary, color: "#fff", fontWeight: 700 }}>
-            {busy ? <><Loader2 size={16} className="animate-spin" /> Drafting insurance note…</> : <><Sparkles size={16} /> Draft insurance note with AI</>}
+            {busy ? <><Loader2 size={16} className="animate-spin" /> Drafting insurance note…</> : <><Sparkles size={16} /> {error ? "Try again" : "Draft insurance note with AI"}</>}
           </button>
         ) : (
           <>
@@ -618,7 +729,7 @@ function SegTabs({ tabs, active, onChange }) {
         return (
           <button key={t.k} onClick={() => onChange(t.k)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm transition-all"
             style={{ background: A ? c.primary : "transparent", color: A ? "#fff" : c.muted, fontWeight: 600 }}>
-            <Icon size={15} /> <span className="hidden xs:inline sm:inline">{t.label}</span>
+            <Icon size={15} /> <span className="hidden sm:inline">{t.label}</span>
           </button>
         );
       })}
@@ -626,8 +737,16 @@ function SegTabs({ tabs, active, onChange }) {
   );
 }
 function Inp({ v, set, ph }) {
-  return <input value={v} onChange={(e) => set(e.target.value)} placeholder={ph} className="p-2.5 rounded-xl text-sm outline-none" style={{ background: c.bg, border: `1px solid ${c.line}` }} />;
+  return <input value={v} onChange={(e) => set(e.target.value)} placeholder={ph} className="p-2.5 rounded-xl text-sm outline-none w-full" style={{ background: c.bg, border: `1px solid ${c.line}` }} />;
 }
 function Recap({ label, value }) {
   return <div className="p-2.5 rounded-xl text-center" style={{ background: c.bg }}><div className="font-display text-xl" style={{ fontWeight: 800 }}>{value}</div><div className="text-xs" style={{ color: c.muted }}>{label}</div></div>;
+}
+function EmptyState({ icon: Icon, message }) {
+  return (
+    <div className="flex flex-col items-center text-center py-10 gap-3" style={{ color: c.muted }}>
+      <Icon size={32} style={{ opacity: 0.3 }} />
+      <p className="text-sm">{message}</p>
+    </div>
+  );
 }

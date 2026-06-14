@@ -55,7 +55,7 @@ const SCHEDULE = [
   { id: "s8",  clientId: "c1", date: "2026-06-16", startTime: "9:00 AM",  endTime: "11:00 AM", address: "2847 Sharer Rd, Tallahassee, FL 32312",     status: "upcoming" },
   { id: "s9",  clientId: "c2", date: "2026-06-16", startTime: "1:00 PM",  endTime: "2:30 PM",  address: "1205 N Monroe St, Tallahassee, FL 32303",    status: "upcoming" },
   { id: "s10", clientId: "c3", date: "2026-06-17", startTime: "10:00 AM", endTime: "12:00 PM", address: "4815 Woodville Hwy, Tallahassee, FL 32305",  status: "upcoming" },
-  { id: "s11", clientId: "c1", date: "2026-06-17", startTime: "2:00 PM",  endTime: "4:00 PM",  address: "2847 Sharer Rd, Tallahassee, FL 32312",     status: "upcoming" },
+  { id: "s11", clientId: "c1", date: "2026-06-17", startTime: "2:00 PM",  endTime: "4:00 PM",  address: "2847 Sharer Rd, Tallahassee, FL 32312",     status: "upcoming", supervisor: "Dr. Martinez" },
   { id: "s12", clientId: "c2", date: "2026-06-18", startTime: "9:00 AM",  endTime: "10:30 AM", address: "1205 N Monroe St, Tallahassee, FL 32303",    status: "upcoming" },
   { id: "s13", clientId: "c3", date: "2026-06-18", startTime: "1:00 PM",  endTime: "3:00 PM",  address: "4815 Woodville Hwy, Tallahassee, FL 32305",  status: "upcoming" },
   { id: "s14", clientId: "c1", date: "2026-06-19", startTime: "9:00 AM",  endTime: "11:00 AM", address: "2847 Sharer Rd, Tallahassee, FL 32312",     status: "upcoming" },
@@ -114,26 +114,70 @@ const TEAM_MEMBERS = {
   "Tucker":       { role: "RBT",  color: "#0E9F8F", initials: "TN" },
   "Dr. Martinez": { role: "BCBA", color: "#7C3AED", initials: "DM" },
   "Kayla R.":     { role: "RBT",  color: "#F97316", initials: "KR" },
+  "Sam T.":       { role: "RBT",  color: "#F59E0B", initials: "ST" },
 };
 
-const SEED_MESSAGES = [
-  { id: "m1", sender: "Dr. Martinez", text: "Morning everyone! Reminder that Jordan's program update is due by Friday. Let me know if you have questions about the new manding targets.", time: "8:14 AM", date: "Jun 9" },
-  { id: "m2", sender: "Kayla R.",     text: "Got it! Quick question — Jordan was really dysregulated during transitions yesterday. Should I try the visual timer before any new demand?", time: "8:31 AM", date: "Jun 9" },
-  { id: "m3", sender: "Dr. Martinez", text: "Yes, 2-minute visual timer before ANY transition. His reinforcer inventory also notes bubbles work well for resetting — try that combo.", time: "8:45 AM", date: "Jun 9" },
-  { id: "m4", sender: "Tucker",       text: "Noted — will try timer + bubbles this week and document it in session notes.", time: "9:02 AM", date: "Jun 9" },
-  { id: "m5", sender: "Dr. Martinez", text: "Ava's parent called asking for an update on her manding progress. Can someone send a summary after Thursday's session?", time: "2:15 PM", date: "Jun 11" },
-  { id: "m6", sender: "Kayla R.",     text: "I have Ava on Thursday — I'll handle it! 👍", time: "2:22 PM", date: "Jun 11" },
-];
+// channel id → { name, description, seed messages }
+const CHANNELS = {
+  general: {
+    name: "General",
+    description: "Team-wide announcements",
+    icon: "🏠",
+    messages: [
+      { id: "g1", sender: "Dr. Martinez", text: "Morning everyone! Reminder that Jordan's program update is due by Friday. Let me know if you have questions about the new manding targets.", time: "8:14 AM", date: "Jun 9" },
+      { id: "g2", sender: "Kayla R.",     text: "Got it! Quick question — Jordan was really dysregulated during transitions yesterday. Should I try the visual timer before any new demand?", time: "8:31 AM", date: "Jun 9" },
+      { id: "g3", sender: "Dr. Martinez", text: "Yes, 2-minute visual timer before ANY transition. His reinforcer inventory also notes bubbles work well for resetting — try that combo.", time: "8:45 AM", date: "Jun 9" },
+      { id: "g4", sender: "Tucker",       text: "Noted — will try timer + bubbles this week and document it in session notes.", time: "9:02 AM", date: "Jun 9" },
+    ],
+  },
+  clinical: {
+    name: "Clinical",
+    description: "Program updates & data questions",
+    icon: "📋",
+    messages: [
+      { id: "c1", sender: "Dr. Martinez", text: "Ava's parent called asking for an update on her manding progress. Can someone send a summary after Thursday's session?", time: "2:15 PM", date: "Jun 11" },
+      { id: "c2", sender: "Kayla R.",     text: "I have Ava on Thursday — I'll handle it! 👍", time: "2:22 PM", date: "Jun 11" },
+      { id: "c3", sender: "Sam T.",       text: "Mateo hit mastery on common objects last session — should I advance to body parts or run one more probe?", time: "10:05 AM", date: "Jun 12" },
+      { id: "c4", sender: "Dr. Martinez", text: "Run one more probe at 80%+ then advance. Good work Sam!", time: "10:41 AM", date: "Jun 12" },
+    ],
+  },
+  scheduling: {
+    name: "Scheduling",
+    description: "Schedule changes & coverage",
+    icon: "📅",
+    messages: [
+      { id: "sc1", sender: "Kayla R.",     text: "Heads up — I need to swap my Tuesday afternoon slot this week. Anyone able to cover Ava 1–2:30 PM?", time: "7:55 PM", date: "Jun 10" },
+      { id: "sc2", sender: "Tucker",       text: "I can do it — I'll reach out to the family to confirm.", time: "8:03 PM", date: "Jun 10" },
+      { id: "sc3", sender: "Dr. Martinez", text: "Thanks Tucker! Please log the coverage swap in the system.", time: "8:11 PM", date: "Jun 10" },
+    ],
+  },
+};
+
+// DMs: key = other person's name
+const DMS = {
+  "Dr. Martinez": [
+    { id: "d1", sender: "Dr. Martinez", text: "Tucker — just want to confirm you're good for the supervision session Tuesday afternoon at Jordan's? I'll be observing 2–4 PM.", time: "3:00 PM", date: "Jun 12" },
+    { id: "d2", sender: "Tucker",       text: "Yes, confirmed! I'll make sure to have the data sheets ready.", time: "3:14 PM", date: "Jun 12" },
+    { id: "d3", sender: "Dr. Martinez", text: "Perfect. I'll be watching manding and transitions especially — those are our focus areas right now.", time: "3:17 PM", date: "Jun 12" },
+  ],
+  "Kayla R.": [
+    { id: "k1", sender: "Kayla R.", text: "Hey! Do you have Jordan's reinforcer list handy? I'm covering for you Friday and want to be prepared.", time: "4:45 PM", date: "Jun 11" },
+    { id: "k2", sender: "Tucker",   text: "Check the Documents tab in his client hub — Reinforcer Inventory is in there!", time: "5:02 PM", date: "Jun 11" },
+  ],
+};
 
 // ---------------- localStorage ----------------
-const SESSION_KEY = (id) => `bh_session_${id}`;
-const CHAT_KEY = "bh_team_chat";
+const SESSION_KEY  = (id) => `bh_session_${id}`;
+const CHANNEL_KEY  = (id) => `bh_channel_${id}`;
+const DM_KEY       = (name) => `bh_dm_${name.replace(/\s+/g, "_")}`;
 function loadSession(id) { try { const r = typeof window !== "undefined" ? localStorage.getItem(SESSION_KEY(id)) : null; return r ? JSON.parse(r) : null; } catch { return null; } }
 function saveSession(id, data) { try { localStorage.setItem(SESSION_KEY(id), JSON.stringify(data)); } catch {} }
 function clearSession(id) { try { localStorage.removeItem(SESSION_KEY(id)); } catch {} }
 function clearAllSessions() { CLIENTS.forEach((cl) => clearSession(cl.id)); }
-function loadChat() { try { const r = typeof window !== "undefined" ? localStorage.getItem(CHAT_KEY) : null; return r ? JSON.parse(r) : SEED_MESSAGES; } catch { return SEED_MESSAGES; } }
-function saveChat(msgs) { try { localStorage.setItem(CHAT_KEY, JSON.stringify(msgs)); } catch {} }
+function loadChannelMsgs(channelId) { try { const r = typeof window !== "undefined" ? localStorage.getItem(CHANNEL_KEY(channelId)) : null; return r ? JSON.parse(r) : CHANNELS[channelId]?.messages ?? []; } catch { return CHANNELS[channelId]?.messages ?? []; } }
+function saveChannelMsgs(channelId, msgs) { try { localStorage.setItem(CHANNEL_KEY(channelId), JSON.stringify(msgs)); } catch {} }
+function loadDmMsgs(name) { try { const r = typeof window !== "undefined" ? localStorage.getItem(DM_KEY(name)) : null; return r ? JSON.parse(r) : DMS[name] ?? []; } catch { return DMS[name] ?? []; } }
+function saveDmMsgs(name, msgs) { try { localStorage.setItem(DM_KEY(name), JSON.stringify(msgs)); } catch {} }
 
 // ---------------- BroadcastChannel ----------------
 const BC_SESSION = "bh_live_session";
@@ -400,14 +444,27 @@ function SessionCard({ session, client, onStart, onViewClient }) {
             <Clock size={11} /> {session.startTime} – {session.endTime}
           </div>
         </div>
-        <span className="text-xs px-2.5 py-1 rounded-full shrink-0" style={{ background: done ? c.primarySoft : c.accentSoft, color: done ? c.primary : c.accent, fontWeight: 700 }}>
-          {done ? "✓ Done" : "Upcoming"}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: done ? c.primarySoft : c.accentSoft, color: done ? c.primary : c.accent, fontWeight: 700 }}>
+            {done ? "✓ Done" : "Upcoming"}
+          </span>
+          {session.supervisor && (
+            <span className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: c.purpleSoft, color: c.purple, fontWeight: 700 }}>
+              <Eye size={10} /> Supervised
+            </span>
+          )}
+        </div>
       </button>
 
       {open && (
         <div className="px-4 pb-4 grid gap-2.5" style={{ borderTop: `1px solid ${c.line}` }}>
-          <div className="flex items-start gap-2 pt-3">
+          {session.supervisor && (
+            <div className="flex items-center gap-2 pt-3 pb-1 px-1">
+              <Users size={14} style={{ color: c.purple, flexShrink: 0 }} />
+              <span className="text-sm" style={{ color: c.purple, fontWeight: 600 }}>BCBA supervision — {session.supervisor} will be present</span>
+            </div>
+          )}
+          <div className={`flex items-start gap-2 ${session.supervisor ? "" : "pt-3"}`}>
             <MapPin size={14} style={{ color: c.primary, marginTop: 2, flexShrink: 0 }} />
             <span className="text-sm leading-snug">{session.address}</span>
           </div>
@@ -468,17 +525,120 @@ function ClientsScreen({ onOpen }) {
   );
 }
 
-// ---------------- Chat Screen ----------------
+// ---------------- Chat Screen (Teams-style) ----------------
 function ChatScreen() {
-  const [messages, setMessages] = useState(() => loadChat());
+  const [view, setView]   = useState({ type: "channel", id: "general" }); // { type: "channel"|"dm", id }
+  const [sideOpen, setSideOpen] = useState(true);
+
+  const viewName = view.type === "channel"
+    ? `# ${CHANNELS[view.id]?.name}`
+    : TEAM_MEMBERS[view.id]?.role === "BCBA" ? `🔒 ${view.id}` : view.id;
+
+  const viewSub = view.type === "channel"
+    ? CHANNELS[view.id]?.description
+    : `Direct message · ${TEAM_MEMBERS[view.id]?.role ?? ""}`;
+
+  return (
+    <div className="pb-28" style={{ height: "calc(100dvh - 72px)" }}>
+      <div className="flex flex-col h-full">
+        {/* Header */}
+        <div className="flex items-center gap-2 mb-2 shrink-0">
+          <button onClick={() => setSideOpen(!sideOpen)} className="grid place-items-center rounded-lg" style={{ width: 34, height: 34, background: sideOpen ? c.primary : c.bg, color: sideOpen ? "#fff" : c.muted, flexShrink: 0 }}>
+            <Users size={16} />
+          </button>
+          <div className="min-w-0">
+            <div className="font-display text-base leading-tight truncate" style={{ fontWeight: 800 }}>{viewName}</div>
+            <div className="text-xs truncate" style={{ color: c.muted }}>{viewSub}</div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 flex-1 min-h-0">
+          {/* Sidebar */}
+          {sideOpen && (
+            <div className="shrink-0 flex flex-col gap-1 overflow-y-auto" style={{ width: 200, paddingRight: 4 }}>
+              {/* Workspace header */}
+              <div className="px-2 py-1.5 rounded-xl mb-1" style={{ background: `linear-gradient(135deg, ${c.primary} 0%, #0A7A6E 100%)` }}>
+                <div className="text-xs" style={{ color: "rgba(255,255,255,0.7)", fontWeight: 600 }}>Cayer Behavioral</div>
+                <div className="text-sm" style={{ color: "#fff", fontWeight: 800 }}>Group</div>
+              </div>
+
+              {/* Channels */}
+              <div className="px-2 pt-1">
+                <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Channels</div>
+                {Object.entries(CHANNELS).map(([id, ch]) => {
+                  const active = view.type === "channel" && view.id === id;
+                  return (
+                    <button key={id} onClick={() => setView({ type: "channel", id })} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left mb-0.5 text-sm"
+                      style={{ background: active ? c.primarySoft : "transparent", color: active ? c.primary : c.ink, fontWeight: active ? 700 : 500 }}>
+                      <span style={{ fontSize: 14 }}>{ch.icon}</span>{ch.name}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Direct messages */}
+              <div className="px-2 pt-2">
+                <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Direct messages</div>
+                {Object.keys(DMS).map((name) => {
+                  const active = view.type === "dm" && view.id === name;
+                  const member = TEAM_MEMBERS[name] || { color: c.muted, initials: name[0], role: "" };
+                  return (
+                    <button key={name} onClick={() => setView({ type: "dm", id: name })} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left mb-0.5 text-sm"
+                      style={{ background: active ? c.primarySoft : "transparent", color: active ? c.primary : c.ink, fontWeight: active ? 700 : 500 }}>
+                      <div className="grid place-items-center rounded-full shrink-0 text-xs" style={{ width: 22, height: 22, background: member.color, color: "#fff", fontWeight: 800 }}>{member.initials}</div>
+                      <span className="truncate">{name}</span>
+                      {member.role === "BCBA" && <span className="ml-auto text-xs px-1 rounded" style={{ background: c.purpleSoft, color: c.purple, fontWeight: 700, fontSize: 9 }}>BCBA</span>}
+                    </button>
+                  );
+                })}
+                {/* Yourself */}
+                <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left mb-0.5 text-sm opacity-50" disabled>
+                  <div className="grid place-items-center rounded-full shrink-0 text-xs" style={{ width: 22, height: 22, background: c.primary, color: "#fff", fontWeight: 800 }}>TN</div>
+                  <span className="truncate">Tucker (you)</span>
+                </button>
+              </div>
+
+              {/* All team members */}
+              <div className="px-2 pt-2">
+                <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Team</div>
+                {Object.entries(TEAM_MEMBERS).map(([name, m]) => (
+                  <div key={name} className="flex items-center gap-2 px-2 py-1.5 text-sm">
+                    <div className="relative shrink-0">
+                      <div className="grid place-items-center rounded-full text-xs" style={{ width: 22, height: 22, background: m.color, color: "#fff", fontWeight: 800 }}>{m.initials}</div>
+                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2" style={{ borderColor: c.surface, background: c.plus }} />
+                    </div>
+                    <span className="truncate" style={{ color: c.ink }}>{name}</span>
+                    <span className="ml-auto text-xs px-1 rounded shrink-0" style={{ background: m.role === "BCBA" ? c.purpleSoft : c.primarySoft, color: m.role === "BCBA" ? c.purple : c.primary, fontWeight: 700, fontSize: 9 }}>{m.role}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Chat pane */}
+          <div className="flex-1 min-w-0">
+            <ChatPane view={view} key={`${view.type}-${view.id}`} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatPane({ view }) {
+  const isChannel = view.type === "channel";
+  const loadMsgs  = () => isChannel ? loadChannelMsgs(view.id) : loadDmMsgs(view.id);
+  const saveMsgs  = (msgs) => isChannel ? saveChannelMsgs(view.id, msgs) : saveDmMsgs(view.id, msgs);
+
+  const [messages, setMessages] = useState(loadMsgs);
   const [input, setInput]       = useState("");
   const bottomRef               = useRef(null);
   const chRef                   = useRef(null);
 
   useEffect(() => {
     try {
-      chRef.current = new BroadcastChannel(BC_CHAT);
-      chRef.current.onmessage = (e) => setMessages((prev) => { const u = [...prev, e.data]; saveChat(u); return u; });
+      chRef.current = new BroadcastChannel(`${BC_CHAT}_${view.type}_${view.id}`);
+      chRef.current.onmessage = (e) => setMessages((prev) => { const u = [...prev, e.data]; saveMsgs(u); return u; });
     } catch {}
     return () => { try { chRef.current?.close(); } catch {} };
   }, []);
@@ -489,7 +649,7 @@ function ChatScreen() {
   const send = () => {
     if (!input.trim()) return;
     const msg = { id: `m${Date.now()}`, sender: CURRENT_USER, text: input.trim(), time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), date: "Today" };
-    setMessages((prev) => { const u = [...prev, msg]; saveChat(u); return u; });
+    setMessages((prev) => { const u = [...prev, msg]; saveMsgs(u); return u; });
     try { chRef.current?.postMessage(msg); } catch {}
     setInput("");
   };
@@ -497,14 +657,13 @@ function ChatScreen() {
   const grouped = {};
   messages.forEach((m) => { (grouped[m.date] = grouped[m.date] || []).push(m); });
 
-  return (
-    <div className="pb-28 flex flex-col" style={{ height: "calc(100dvh - 72px)" }}>
-      <div className="mb-3 shrink-0">
-        <div className="font-display text-2xl" style={{ fontWeight: 800 }}>Team chat</div>
-        <div className="text-xs mt-0.5" style={{ color: c.muted }}>Cayer Behavioral Group</div>
-      </div>
+  const placeholder = isChannel
+    ? `Message #${CHANNELS[view.id]?.name ?? view.id}…`
+    : `Message ${view.id}…`;
 
-      <div className="flex-1 overflow-y-auto min-h-0">
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto min-h-0 pr-1">
         {Object.entries(grouped).map(([date, msgs]) => (
           <div key={date}>
             <div className="text-center my-3">
@@ -517,11 +676,11 @@ function ChatScreen() {
               return (
                 <div key={m.id} className={`flex mb-2 ${isMine ? "justify-end" : "justify-start"}`}>
                   {!isMine && (
-                    <div className="grid place-items-center rounded-full shrink-0 mr-2 self-end mb-5" style={{ width: 30, height: 30, background: member.color, color: "#fff", fontSize: 10, fontWeight: 800 }}>
+                    <div className="grid place-items-center rounded-full shrink-0 mr-2 self-end mb-5" style={{ width: 28, height: 28, background: member.color, color: "#fff", fontSize: 9, fontWeight: 800 }}>
                       {member.initials}
                     </div>
                   )}
-                  <div style={{ maxWidth: "76%" }}>
+                  <div style={{ maxWidth: "78%" }}>
                     {!isMine && showHdr && (
                       <div className="flex items-center gap-1.5 mb-1 ml-0.5">
                         <span className="text-xs font-medium">{m.sender}</span>
@@ -530,13 +689,13 @@ function ChatScreen() {
                         )}
                       </div>
                     )}
-                    <div className="px-3.5 py-2.5 text-sm leading-relaxed" style={{
+                    <div className="px-3 py-2 text-sm leading-relaxed" style={{
                       background: isMine ? c.primary : c.surface,
                       color: isMine ? "#fff" : c.ink,
                       border: isMine ? "none" : `1px solid ${c.line}`,
-                      borderRadius: isMine ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+                      borderRadius: isMine ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                     }}>{m.text}</div>
-                    <div className={`text-xs mt-1 ${isMine ? "text-right" : "ml-0.5"}`} style={{ color: c.muted }}>{m.time}</div>
+                    <div className={`text-xs mt-0.5 ${isMine ? "text-right" : "ml-0.5"}`} style={{ color: c.muted }}>{m.time}</div>
                   </div>
                 </div>
               );
@@ -548,10 +707,10 @@ function ChatScreen() {
 
       <div className="flex gap-2 pt-2 shrink-0" style={{ borderTop: `1px solid ${c.line}` }}>
         <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder="Message the team…" className="flex-1 px-3.5 py-2.5 rounded-xl text-sm outline-none" style={{ background: c.bg, border: `1px solid ${c.line}` }} />
+          placeholder={placeholder} className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: c.bg, border: `1px solid ${c.line}` }} />
         <button onClick={send} disabled={!input.trim()} className="grid place-items-center rounded-xl transition-transform active:scale-95"
-          style={{ width: 44, height: 44, background: input.trim() ? c.primary : c.line, color: "#fff", flexShrink: 0 }}>
-          <Send size={17} />
+          style={{ width: 40, height: 40, background: input.trim() ? c.primary : c.line, color: "#fff", flexShrink: 0 }}>
+          <Send size={16} />
         </button>
       </div>
     </div>

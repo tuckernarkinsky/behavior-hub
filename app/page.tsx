@@ -111,10 +111,15 @@ const PROTOCOLS = {
 // ---------------- Team chat seed data ----------------
 const CURRENT_USER = "Tucker";
 const TEAM_MEMBERS = {
-  "Tucker":       { role: "RBT",  color: "#0E9F8F", initials: "TN" },
-  "Dr. Martinez": { role: "BCBA", color: "#7C3AED", initials: "DM" },
-  "Kayla R.":     { role: "RBT",  color: "#F97316", initials: "KR" },
-  "Sam T.":       { role: "RBT",  color: "#F59E0B", initials: "ST" },
+  "Tucker":         { role: "RBT",  color: "#0E9F8F", initials: "TN" },
+  "Dr. Martinez":   { role: "BCBA", color: "#7C3AED", initials: "DM" },
+  "Kayla R.":       { role: "RBT",  color: "#F97316", initials: "KR" },
+  "Sam T.":         { role: "RBT",  color: "#F59E0B", initials: "ST" },
+  "Dr. Chen":       { role: "BCBA", color: "#8B5CF6", initials: "EC" },
+  "Priya N.":       { role: "OT",   color: "#EC4899", initials: "PN" },
+  "Marcus W.":      { role: "PT",   color: "#14B8A6", initials: "MW" },
+  "Dr. Okonkwo":    { role: "Peds", color: "#EF4444", initials: "AO" },
+  "Jamie L.":       { role: "RBT",  color: "#84CC16", initials: "JL" },
 };
 
 // channel id → { name, description, seed messages }
@@ -164,6 +169,21 @@ const DMS = {
     { id: "k1", sender: "Kayla R.", text: "Hey! Do you have Jordan's reinforcer list handy? I'm covering for you Friday and want to be prepared.", time: "4:45 PM", date: "Jun 11" },
     { id: "k2", sender: "Tucker",   text: "Check the Documents tab in his client hub — Reinforcer Inventory is in there!", time: "5:02 PM", date: "Jun 11" },
   ],
+  "Priya N.": [
+    { id: "p1", sender: "Priya N.", text: "Hi Tucker! Just a heads up — I worked with Jordan this morning on fine motor and he was having a tough time with scissors. May be worth noting in your session if it comes up behaviorally.", time: "11:30 AM", date: "Jun 12" },
+    { id: "p2", sender: "Tucker",   text: "Thanks Priya! Really helpful context. I'll watch for frustration during tabletop tasks.", time: "11:44 AM", date: "Jun 12" },
+  ],
+  "Marcus W.": [
+    { id: "mw1", sender: "Marcus W.", text: "Tucker — Mateo's PT goals include increased core stability for seated tasks. If he's slouching during tabletop work let me know and I can share some positioning strategies.", time: "9:20 AM", date: "Jun 10" },
+    { id: "mw2", sender: "Tucker",   text: "Noted! He does seem to tire out at the table around the 30-minute mark. I'll log it.", time: "9:35 AM", date: "Jun 10" },
+  ],
+  "Dr. Okonkwo": [
+    { id: "do1", sender: "Dr. Okonkwo", text: "Hi Tucker, just a reminder that Ava's medication was adjusted last week. The family was told to watch for increased irritability in the first few days. Please flag anything unusual in your notes.", time: "8:00 AM", date: "Jun 9" },
+    { id: "do2", sender: "Tucker",      text: "Understood, thank you Dr. Okonkwo. I'll keep a close eye and document any changes in affect.", time: "8:12 AM", date: "Jun 9" },
+  ],
+  "Dr. Chen": [],
+  "Sam T.":    [],
+  "Jamie L.":  [],
 };
 
 // ---------------- localStorage ----------------
@@ -352,7 +372,18 @@ function ScheduleScreen({ onStartSession, onViewClient }) {
   const todaySessions    = SCHEDULE.filter((s) => s.date === today);
   const upcomingSessions = SCHEDULE.filter((s) => s.date > today).sort((a, b) => a.date.localeCompare(b.date));
   const pastSessions     = SCHEDULE.filter((s) => s.date < today).sort((a, b) => b.date.localeCompare(a.date));
-  const thisWeekDone     = SCHEDULE.filter((s) => s.status === "completed").length;
+  const completedSessions = SCHEDULE.filter((s) => s.status === "completed");
+  const thisWeekDone      = completedSessions.length;
+
+  // Calculate total hours from completed sessions
+  const parseHour = (t) => {
+    const [time, period] = t.split(" ");
+    let [h, m] = time.split(":").map(Number);
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return h + m / 60;
+  };
+  const totalHours = completedSessions.reduce((sum, s) => sum + (parseHour(s.endTime) - parseHour(s.startTime)), 0);
 
   const groupByDate = (sessions) => {
     const m = {};
@@ -370,16 +401,18 @@ function ScheduleScreen({ onStartSession, onViewClient }) {
         <div className="font-display text-2xl" style={{ fontWeight: 800 }}>Tucker Narkinsky</div>
         <div className="text-sm mt-0.5" style={{ opacity: 0.75 }}>RBT · Cayer Behavioral Group</div>
         <div className="flex gap-5 mt-4">
-          {[
-            { v: thisWeekDone,            label: "Done this week" },
-            { v: upcomingSessions.length, label: "Upcoming" },
-            { v: CLIENTS.length,          label: "Clients" },
-          ].map(({ v, label }, i) => (
-            <div key={i} className="text-center">
-              <div className="font-display text-2xl" style={{ fontWeight: 800 }}>{v}</div>
-              <div className="text-xs" style={{ opacity: 0.7 }}>{label}</div>
-            </div>
-          ))}
+          <div className="text-center">
+            <div className="font-display text-2xl" style={{ fontWeight: 800 }}>{totalHours % 1 === 0 ? totalHours : totalHours.toFixed(1)}</div>
+            <div className="text-xs" style={{ opacity: 0.7 }}>hrs completed</div>
+          </div>
+          <div className="text-center">
+            <div className="font-display text-2xl" style={{ fontWeight: 800 }}>{thisWeekDone}</div>
+            <div className="text-xs" style={{ opacity: 0.7 }}>sessions done</div>
+          </div>
+          <div className="text-center">
+            <div className="font-display text-2xl" style={{ fontWeight: 800 }}>{upcomingSessions.length}</div>
+            <div className="text-xs" style={{ opacity: 0.7 }}>upcoming</div>
+          </div>
         </div>
       </div>
 
@@ -428,8 +461,10 @@ function ScheduleScreen({ onStartSession, onViewClient }) {
 function SessionCard({ session, client, onStart, onViewClient }) {
   const [open, setOpen] = useState(false);
   if (!client) return null;
-  const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(session.address)}`;
-  const wazeUrl = `https://waze.com/ul?q=${encodeURIComponent(session.address)}&navigate=yes`;
+  // Opens Apple Maps on iOS/Mac, Google Maps elsewhere
+  const navUrl = /iPhone|iPad|iPod|Macintosh/.test(navigator?.userAgent ?? "")
+    ? `http://maps.apple.com/?daddr=${encodeURIComponent(session.address)}&dirflg=d`
+    : `https://maps.google.com/?q=${encodeURIComponent(session.address)}`;
   const done = session.status === "completed";
 
   return (
@@ -468,15 +503,12 @@ function SessionCard({ session, client, onStart, onViewClient }) {
             <MapPin size={14} style={{ color: c.primary, marginTop: 2, flexShrink: 0 }} />
             <span className="text-sm leading-snug">{session.address}</span>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs" style={{ background: c.primarySoft, color: c.primary, fontWeight: 700 }}>
-              <Navigation size={12} /> Maps
+          <div className="grid grid-cols-2 gap-2">
+            <a href={navUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm col-span-1" style={{ background: c.primary, color: "#fff", fontWeight: 700 }}>
+              <Navigation size={14} /> Navigate to session
             </a>
-            <a href={wazeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs" style={{ background: "#E0F4FF", color: "#00AAFF", fontWeight: 700 }}>
-              <Navigation size={12} /> Waze
-            </a>
-            <button onClick={onViewClient} className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs" style={{ background: c.bg, color: c.muted, fontWeight: 700 }}>
-              <Users size={12} /> Client
+            <button onClick={onViewClient} className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm" style={{ background: c.bg, color: c.muted, fontWeight: 700 }}>
+              <Users size={14} /> View client
             </button>
           </div>
           {!done && (
@@ -582,35 +614,21 @@ function ChatScreen() {
                 {Object.keys(DMS).map((name) => {
                   const active = view.type === "dm" && view.id === name;
                   const member = TEAM_MEMBERS[name] || { color: c.muted, initials: name[0], role: "" };
+                  const hasUnread = DMS[name].length > 0 && DMS[name][DMS[name].length - 1].sender !== CURRENT_USER;
+                  const roleColor = { BCBA: c.purple, OT: "#EC4899", PT: "#14B8A6", Peds: "#EF4444", RBT: c.primary }[member.role] ?? c.muted;
+                  const roleBg   = { BCBA: c.purpleSoft, OT: "#FCE7F3", PT: "#CCFBF1", Peds: "#FEE2E2", RBT: c.primarySoft }[member.role] ?? c.bg;
                   return (
                     <button key={name} onClick={() => setView({ type: "dm", id: name })} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left mb-0.5 text-sm"
                       style={{ background: active ? c.primarySoft : "transparent", color: active ? c.primary : c.ink, fontWeight: active ? 700 : 500 }}>
-                      <div className="grid place-items-center rounded-full shrink-0 text-xs" style={{ width: 22, height: 22, background: member.color, color: "#fff", fontWeight: 800 }}>{member.initials}</div>
-                      <span className="truncate">{name}</span>
-                      {member.role === "BCBA" && <span className="ml-auto text-xs px-1 rounded" style={{ background: c.purpleSoft, color: c.purple, fontWeight: 700, fontSize: 9 }}>BCBA</span>}
+                      <div className="relative shrink-0">
+                        <div className="grid place-items-center rounded-full text-xs" style={{ width: 22, height: 22, background: member.color, color: "#fff", fontWeight: 800 }}>{member.initials}</div>
+                        {hasUnread && !active && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: c.accent }} />}
+                      </div>
+                      <span className="truncate flex-1">{name}</span>
+                      <span className="text-xs px-1 rounded shrink-0" style={{ background: roleBg, color: roleColor, fontWeight: 700, fontSize: 9 }}>{member.role}</span>
                     </button>
                   );
                 })}
-                {/* Yourself */}
-                <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left mb-0.5 text-sm opacity-50" disabled>
-                  <div className="grid place-items-center rounded-full shrink-0 text-xs" style={{ width: 22, height: 22, background: c.primary, color: "#fff", fontWeight: 800 }}>TN</div>
-                  <span className="truncate">Tucker (you)</span>
-                </button>
-              </div>
-
-              {/* All team members */}
-              <div className="px-2 pt-2">
-                <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Team</div>
-                {Object.entries(TEAM_MEMBERS).map(([name, m]) => (
-                  <div key={name} className="flex items-center gap-2 px-2 py-1.5 text-sm">
-                    <div className="relative shrink-0">
-                      <div className="grid place-items-center rounded-full text-xs" style={{ width: 22, height: 22, background: m.color, color: "#fff", fontWeight: 800 }}>{m.initials}</div>
-                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2" style={{ borderColor: c.surface, background: c.plus }} />
-                    </div>
-                    <span className="truncate" style={{ color: c.ink }}>{name}</span>
-                    <span className="ml-auto text-xs px-1 rounded shrink-0" style={{ background: m.role === "BCBA" ? c.purpleSoft : c.primarySoft, color: m.role === "BCBA" ? c.purple : c.primary, fontWeight: 700, fontSize: 9 }}>{m.role}</span>
-                  </div>
-                ))}
               </div>
             </div>
           )}

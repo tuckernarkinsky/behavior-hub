@@ -29,9 +29,8 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      // Never expose missing-key details to end users
       return NextResponse.json(
-        { error: "AI features are temporarily unavailable. Please try again later." },
+        { error: "DEBUG: ANTHROPIC_API_KEY is missing from environment" },
         { status: 503 }
       );
     }

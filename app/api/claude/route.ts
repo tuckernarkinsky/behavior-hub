@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     if (!res.ok) {
       const raw = data?.error?.message ?? "";
       return NextResponse.json(
-        { error: friendlyError(res.status, raw) },
+        { error: `DEBUG [${res.status}]: ${raw || JSON.stringify(data)}` },
         { status: res.status }
       );
     }

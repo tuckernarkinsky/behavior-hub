@@ -33,6 +33,26 @@ const FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap');
 .font-display{font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-0.02em}
 .font-body{font-family:'DM Sans',sans-serif}
+
+@keyframes bh-border-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(249,115,22,0), inset 0 0 0 3px rgba(249,115,22,0.9); }
+  50%      { box-shadow: 0 0 0 18px rgba(249,115,22,0), inset 0 0 0 3px rgba(249,115,22,1); }
+}
+@keyframes bh-glow-pulse {
+  0%,100% { box-shadow: 0 0 0 2px #F97316, 0 0 20px 4px rgba(249,115,22,0.35); }
+  50%      { box-shadow: 0 0 0 3px #F97316, 0 0 40px 12px rgba(249,115,22,0.55); }
+}
+@keyframes bh-mic-ring {
+  0%,100% { transform: scale(1);   opacity: 1; }
+  50%      { transform: scale(1.12); opacity: 0.85; }
+}
+.bh-listening-border {
+  animation: bh-glow-pulse 1.4s ease-in-out infinite;
+  border-radius: 0 !important;
+  position: relative;
+  z-index: 0;
+}
+.bh-mic-pulse { animation: bh-mic-ring 1.4s ease-in-out infinite; }
 `;
 
 // ---------------- Seed data ----------------
@@ -63,21 +83,21 @@ const SCHEDULE = [
 ];
 
 const PROGRAM_TEMPLATE = [
-  { id: "p1",  name: "Simple compliance",    prompt: "Independent",    domain: "Compliance" },
-  { id: "p2a", name: "Gross motor",          prompt: "Model prompt",   group: "Motor imitation" },
-  { id: "p2b", name: "Fine motor",           prompt: "Model prompt",   group: "Motor imitation" },
-  { id: "p2c", name: "Oral motor",           prompt: "Independent",    group: "Motor imitation" },
-  { id: "p3a", name: "Animals",              prompt: "Gestural prompt", group: "Receptive ID" },
-  { id: "p3b", name: "Common objects",       prompt: "Independent",    group: "Receptive ID" },
-  { id: "p3c", name: "Body parts",           prompt: "Independent",    group: "Receptive ID" },
-  { id: "p4",  name: "Manding for break",    prompt: "Independent",    domain: "Manding" },
-  { id: "p5",  name: "Tact: common objects", prompt: "Independent",    domain: "Tacting" },
+  { id: "p1",  name: "Following directions",    prompt: "Independent",    domain: "Cooperation & Participation" },
+  { id: "p2a", name: "Gross motor imitation",   prompt: "Model prompt",   group: "Movement imitation" },
+  { id: "p2b", name: "Fine motor imitation",    prompt: "Model prompt",   group: "Movement imitation" },
+  { id: "p2c", name: "Oral motor imitation",    prompt: "Independent",    group: "Movement imitation" },
+  { id: "p3a", name: "Animals",                 prompt: "Gestural prompt", group: "Listener responding" },
+  { id: "p3b", name: "Common objects",          prompt: "Independent",    group: "Listener responding" },
+  { id: "p3c", name: "Body parts",              prompt: "Independent",    group: "Listener responding" },
+  { id: "p4",  name: "Requesting a break",      prompt: "Independent",    domain: "Functional communication" },
+  { id: "p5",  name: "Labeling objects",        prompt: "Independent",    domain: "Expressive language" },
 ];
 
 const BEHAVIOR_TEMPLATE = [
-  { id: "b1", name: "Elopement" },
-  { id: "b2", name: "Aggression (hitting)" },
-  { id: "b3", name: "Vocal stereotypy" },
+  { id: "b1", name: "Unsafe departure (leaving area)" },
+  { id: "b2", name: "Physical aggression (hitting)" },
+  { id: "b3", name: "Vocal repetitive behavior" },
 ];
 
 const PAST_SESSIONS = {
@@ -101,11 +121,11 @@ const DOCUMENTS = {
 
 const PROTOCOLS = {
   c1: [
-    { title: "Simple compliance", body: "SD: 'Jordan, [one-step instruction].' Target: independent compliance within 5s. Prompt hierarchy: independent → gestural → model → partial physical. Mastery: 80% independent across 3 consecutive sessions." },
-    { title: "Elopement (behavior reduction)", body: "Definition: leaving designated area (>3 ft) without permission. Function: escape. Strategy: offer choices, errorless demands, FCT — teach 'break' mand. Consequence: guided return, no attention." },
+    { title: "Following directions", body: "SD: 'Jordan, [one-step instruction].' Target: independent response within 5s. Prompt hierarchy: independent → gestural → model → partial physical (least-to-most). Reinforce immediately and enthusiastically. Mastery: 80% independent across 3 consecutive sessions with two different instructors." },
+    { title: "Unsafe departure — behavior support plan", body: "Definition: leaving the designated learning area (>3 ft) without permission or signaling need. Maintaining function: escape from demands. Prevention: embed preferred activities, offer choice-making, provide movement breaks proactively. FCT: teach 'I need a break' using PECS or verbal approximation before demands escalate. Response: calm, neutral guided return with minimal attention; honor break request once the learner is back in area." },
   ],
-  c2: [{ title: "Manding", body: "SD: natural establishing operations. Target: spontaneous mand for preferred items using full word or approximation. Mastery: 80% unprompted across 3 sessions." }],
-  c3: [{ title: "Tolerance for waiting", body: "SD: 'Wait.' Target: tolerate 30-second delay before receiving preferred item. Prompt hierarchy: gestural → verbal. Reinforce with preferred item + verbal praise." }],
+  c2: [{ title: "Functional communication — requesting", body: "Context: natural motivating operations (child is interested in preferred item). Target: spontaneous request using full word, approximation, or AAC. Never withhold for perfect pronunciation — honor any clear communicative attempt. Mastery: 80% unprompted, generalized across 3 environments and 2 communication partners." }],
+  c3: [{ title: "Waiting with support", body: "SD: 'Just a moment' + visual timer. Target: tolerate a 30-second delay before receiving preferred item without challenging behavior. Prompt: gestural cue toward timer → verbal reminder 'almost time.' Reinforce waiting with preferred item + specific verbal praise ('Great waiting!'). Increase delay gradually in 10-second increments as tolerance builds." }],
 };
 
 // ---------------- Team chat seed data ----------------
@@ -254,8 +274,105 @@ async function askClaude(prompt) {
 async function parseVoiceEntry(text, programs, behaviors) {
   const progList = programs.map((p) => `- ${p.id}: "${p.name}" (${p.group ? p.group + " group" : (p.domain || "") + " domain"})`).join("\n");
   const behList  = behaviors.map((b) => `- ${b.id}: "${b.name}"`).join("\n");
-  const raw = await askClaude(`You are an ABA session data parser. Parse the RBT's verbal note into structured data.\n\nPROGRAMS:\n${progList}\n\nBEHAVIORS:\n${behList}\n\nReturn ONLY valid JSON with no markdown:\n{"trials":[{"programId":"p1","marks":["+"]}],"behaviors":[{"behaviorId":"b1","delta":1}],"abcs":[{"antecedent":"...","behavior":"...","consequence":"...","function":"escape"}],"summary":"one sentence"}\n\n+ = independent/correct, - = prompted/incorrect. Only include items actually mentioned.\n\nRBT note: "${text}"`);
-  return JSON.parse(raw.replace(/```json\n?|\n?```/g, "").trim());
+  const raw = await askClaude(`You are an expert ABA clinical documentation assistant parsing a therapist's spoken note. You are fluent in all standard ABA terminology.
+
+Therapists use natural ABA clinical language. Extract structured data AND capture clinical observations/strategies that don't map to specific programs.
+
+═══ TRIAL OUTCOME LANGUAGE (→ "+" or "−") ═══
+INDEPENDENT (+): got it, nailed it, independent, unprompted, no prompt needed, correct, successful, mastered, full independence, spontaneous, without help, on their own, zero-second delay, errorless
+PROMPTED (−): needed a prompt, required assistance, prompted, model prompt, gestural prompt, verbal prompt, partial physical, full physical, hand over hand, HOH, physical guidance, errorless teaching, prompted response, incorrect, error, needed help, failed, couldn't do it, maximum prompt, minimum prompt
+
+═══ PROMPT HIERARCHY TERMS ═══
+- "independent / I / no prompt / 0 prompt" → +
+- "gestural / G / point / look" → −
+- "verbal / V / verbal cue / vocal prompt" → −
+- "model / M / visual model / demonstration" → −
+- "partial physical / PP" → −
+- "full physical / FP / hand over hand / HOH" → −
+- "errorless / EL" → −
+
+═══ BEHAVIOR FUNCTIONS (→ ABC function field) ═══
+- "escape / escape-maintained / escape function / avoidance / wants to get away / terminate task" → "escape"
+- "attention / attention-maintained / seeking attention / wants attention / social positive" → "attention"
+- "tangible / access / wants the item / item-maintained / preferred item" → "tangible"
+- "automatic / sensory / self-stimulatory / stimming / internal reinforcement / no social mediation" → "sensory"
+
+═══ BEHAVIOR TERMINOLOGY (match to behaviors list) ═══
+- "elopement / eloped / left the area / ran away / bolted / unsafe departure / left designated area" → elopement behavior
+- "hitting / struck / hit / physical aggression / aggression / kicked / scratched / bit / bite / scratch" → aggression behavior
+- "vocal stereotypy / scripting / repetitive vocalizations / vocal stim / echolalic / echolalia / repetitive speech" → vocal stereotypy behavior
+- "self-injurious / SIB / head banging / self-harm" → any SIB behavior in list
+- "tantrum / meltdown / crying / screaming / dropping" → any tantrum behavior in list
+- "property destruction / throwing / tearing / breaking" → any property destruction behavior in list
+- "noncompliance / refused / refusal / did not comply / ignoring" → any noncompliance behavior in list
+- "PICA / putting in mouth / mouthing objects" → any PICA behavior in list
+
+═══ CLINICAL TERMS TO CAPTURE IN "note" ═══
+- FCT / functional communication training
+- DRO / differential reinforcement of other behavior
+- DRA / differential reinforcement of alternative behavior
+- DRI / differential reinforcement of incompatible behavior
+- extinction / planned ignoring / EXT
+- token economy / token board / token system
+- preference assessment / paired stimulus / MSWO / free operant
+- reinforcer / reinforcement / SR+ / SR−
+- punisher / punishment / positive punishment / negative punishment
+- mand training / manding / requesting
+- tact training / labeling
+- intraverbal / fill-in / conversational
+- echoic / imitation / vocal imitation
+- PECS / picture exchange
+- ABA / applied behavior analysis / behavior intervention
+- behavior intervention plan / BIP
+- functional behavior assessment / FBA
+- VB-MAPP / ABLLS / AFLS / assessment
+- task analysis / chaining / forward chain / backward chain / total task
+- shaping / successive approximation
+- generalization / maintenance / transfer of stimulus control
+- discrimination / SD / delta / discriminative stimulus
+- antecedent / setting event / establishing operation / EO / MO / motivating operation
+- consequence / contingency / three-term contingency
+- baseline / probe / probe data / rate / frequency / duration / latency
+- IOA / interobserver agreement
+- visual schedule / first-then / token board
+- social story / video modeling / peer modeling
+- crisis / restraint / de-escalation / calming strategy
+- redirect / redirection / guided compliance / prompt to return
+- time delay / progressive time delay / constant time delay
+- transfer trial / mixed trial / mass trial / random rotation
+- errorless learning / error correction / four-step error correction
+
+PROGRAMS (match flexibly — a therapist saying "animals" means receptive ID animals):
+${progList}
+
+BEHAVIORS (match flexibly):
+${behList}
+
+Return ONLY valid JSON, no markdown fences:
+{
+  "trials": [{"programId": "p1", "marks": ["+"]}],
+  "behaviors": [{"behaviorId": "b1", "delta": 1}],
+  "abcs": [{"antecedent": "...", "behavior": "...", "consequence": "...", "function": "escape"}],
+  "note": "Any clinical observations, behavior functions identified, intervention strategies mentioned, or anything that doesn't map to a specific program/behavior — captured verbatim as a session note. Empty string if nothing.",
+  "summary": "One sentence plain-English summary of what was logged."
+}
+
+IMPORTANT:
+- ALL arrays can be empty [] if nothing matches
+- Put strategy language ("use FCT," "redirect to circle," "attention and escape maintain behavior") in the "note" field — never discard it
+- Do not fabricate trial data. Only log what was explicitly stated.
+- If the entire note is clinical observation with no trial data, return empty arrays and put everything in "note"
+
+Therapist note: "${text}"`);
+
+  // Robust parse — strip markdown, then try JSON.parse
+  const cleaned = raw.replace(/```(?:json)?\n?/g, "").replace(/\n?```/g, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // If JSON is malformed, build a safe fallback that at least saves the text as a note
+    return { trials: [], behaviors: [], abcs: [], note: text, summary: "Voice note saved." };
+  }
 }
 
 // ================= APP =================
@@ -331,6 +448,11 @@ export default function BehaviorHubRBT() {
       {/* Bottom nav — hide during session */}
       {screen !== "session" && (
         <BottomNav tab={navTab} onChange={switchTab} chatBadge={chatBadge} />
+      )}
+
+      {/* Global AI button — all screens except live session */}
+      {screen !== "session" && (
+        <GlobalAIButton navTab={navTab} client={screen === "clientHub" ? client : null} />
       )}
     </div>
   );
@@ -557,93 +679,122 @@ function ClientsScreen({ onOpen }) {
   );
 }
 
-// ---------------- Chat Screen (Teams-style) ----------------
+// ---- Role color helpers ----
+const ROLE_COLOR = { BCBA: c.purple, OT: "#EC4899", PT: "#14B8A6", Peds: "#EF4444", RBT: c.primary };
+const ROLE_BG    = { BCBA: c.purpleSoft, OT: "#FCE7F3", PT: "#CCFBF1", Peds: "#FEE2E2", RBT: c.primarySoft };
+
+// ---- Build a flat inbox list ----
+function buildInbox() {
+  const rows = [];
+  // Channels first
+  Object.entries(CHANNELS).forEach(([id, ch]) => {
+    const msgs = ch.messages;
+    const last = msgs[msgs.length - 1];
+    rows.push({ type: "channel", id, name: ch.name, icon: ch.icon, description: ch.description, lastMsg: last?.text ?? "", lastTime: last?.time ?? "", lastDate: last?.date ?? "", lastSender: last?.sender ?? "", unread: false });
+  });
+  // DMs
+  Object.entries(DMS).forEach(([name, msgs]) => {
+    const member = TEAM_MEMBERS[name] || { color: c.muted, initials: name[0], role: "" };
+    const last   = msgs[msgs.length - 1];
+    const unread = last && last.sender !== CURRENT_USER;
+    rows.push({ type: "dm", id: name, name, member, lastMsg: last?.text ?? "", lastTime: last?.time ?? "", lastDate: last?.date ?? "", lastSender: last?.sender ?? "", unread });
+  });
+  return rows;
+}
+
+// ---------------- Chat Screen (inbox → conversation) ----------------
 function ChatScreen() {
-  const [view, setView]   = useState({ type: "channel", id: "general" }); // { type: "channel"|"dm", id }
-  const [sideOpen, setSideOpen] = useState(true);
+  const [open, setOpen] = useState(null); // null = inbox, or { type, id }
+  const inbox = buildInbox();
 
-  const viewName = view.type === "channel"
-    ? `# ${CHANNELS[view.id]?.name}`
-    : TEAM_MEMBERS[view.id]?.role === "BCBA" ? `🔒 ${view.id}` : view.id;
-
-  const viewSub = view.type === "channel"
-    ? CHANNELS[view.id]?.description
-    : `Direct message · ${TEAM_MEMBERS[view.id]?.role ?? ""}`;
+  if (open) {
+    return <ChatConversation view={open} onBack={() => setOpen(null)} />;
+  }
 
   return (
-    <div className="pb-28" style={{ height: "calc(100dvh - 72px)" }}>
-      <div className="flex flex-col h-full">
-        {/* Header */}
-        <div className="flex items-center gap-2 mb-2 shrink-0">
-          <button onClick={() => setSideOpen(!sideOpen)} className="grid place-items-center rounded-lg" style={{ width: 34, height: 34, background: sideOpen ? c.primary : c.bg, color: sideOpen ? "#fff" : c.muted, flexShrink: 0 }}>
-            <Users size={16} />
-          </button>
-          <div className="min-w-0">
-            <div className="font-display text-base leading-tight truncate" style={{ fontWeight: 800 }}>{viewName}</div>
-            <div className="text-xs truncate" style={{ color: c.muted }}>{viewSub}</div>
-          </div>
+    <div className="pb-28">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <div className="font-display text-2xl" style={{ fontWeight: 800 }}>Messages</div>
+          <div className="text-xs mt-0.5" style={{ color: c.muted }}>Cayer Behavioral Group</div>
         </div>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs" style={{ background: c.primarySoft, color: c.primary, fontWeight: 700 }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.primary }} /> {Object.keys(TEAM_MEMBERS).length} online
+        </div>
+      </div>
 
-        <div className="flex gap-2 flex-1 min-h-0">
-          {/* Sidebar */}
-          {sideOpen && (
-            <div className="shrink-0 flex flex-col gap-1 overflow-y-auto" style={{ width: 200, paddingRight: 4 }}>
-              {/* Workspace header */}
-              <div className="px-2 py-1.5 rounded-xl mb-1" style={{ background: `linear-gradient(135deg, ${c.primary} 0%, #0A7A6E 100%)` }}>
-                <div className="text-xs" style={{ color: "rgba(255,255,255,0.7)", fontWeight: 600 }}>Cayer Behavioral</div>
-                <div className="text-sm" style={{ color: "#fff", fontWeight: 800 }}>Group</div>
+      {/* Channels section */}
+      <div className="mt-4 mb-1">
+        <SectionLabel>Channels</SectionLabel>
+      </div>
+      <div className="rounded-2xl overflow-hidden mb-4" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
+        {inbox.filter((r) => r.type === "channel").map((row, i, arr) => (
+          <button key={row.id} onClick={() => setOpen({ type: "channel", id: row.id })}
+            className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:opacity-70"
+            style={{ borderBottom: i < arr.length - 1 ? `1px solid ${c.line}` : "none" }}>
+            {/* Channel icon */}
+            <div className="grid place-items-center rounded-xl shrink-0 text-xl" style={{ width: 44, height: 44, background: c.primarySoft }}>
+              {row.icon}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm" style={{ fontWeight: 700 }}>#{row.name}</span>
+                <span className="text-xs shrink-0" style={{ color: c.muted }}>{row.lastTime}</span>
               </div>
-
-              {/* Channels */}
-              <div className="px-2 pt-1">
-                <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Channels</div>
-                {Object.entries(CHANNELS).map(([id, ch]) => {
-                  const active = view.type === "channel" && view.id === id;
-                  return (
-                    <button key={id} onClick={() => setView({ type: "channel", id })} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left mb-0.5 text-sm"
-                      style={{ background: active ? c.primarySoft : "transparent", color: active ? c.primary : c.ink, fontWeight: active ? 700 : 500 }}>
-                      <span style={{ fontSize: 14 }}>{ch.icon}</span>{ch.name}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Direct messages */}
-              <div className="px-2 pt-2">
-                <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Direct messages</div>
-                {Object.keys(DMS).map((name) => {
-                  const active = view.type === "dm" && view.id === name;
-                  const member = TEAM_MEMBERS[name] || { color: c.muted, initials: name[0], role: "" };
-                  const hasUnread = DMS[name].length > 0 && DMS[name][DMS[name].length - 1].sender !== CURRENT_USER;
-                  const roleColor = { BCBA: c.purple, OT: "#EC4899", PT: "#14B8A6", Peds: "#EF4444", RBT: c.primary }[member.role] ?? c.muted;
-                  const roleBg   = { BCBA: c.purpleSoft, OT: "#FCE7F3", PT: "#CCFBF1", Peds: "#FEE2E2", RBT: c.primarySoft }[member.role] ?? c.bg;
-                  return (
-                    <button key={name} onClick={() => setView({ type: "dm", id: name })} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left mb-0.5 text-sm"
-                      style={{ background: active ? c.primarySoft : "transparent", color: active ? c.primary : c.ink, fontWeight: active ? 700 : 500 }}>
-                      <div className="relative shrink-0">
-                        <div className="grid place-items-center rounded-full text-xs" style={{ width: 22, height: 22, background: member.color, color: "#fff", fontWeight: 800 }}>{member.initials}</div>
-                        {hasUnread && !active && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: c.accent }} />}
-                      </div>
-                      <span className="truncate flex-1">{name}</span>
-                      <span className="text-xs px-1 rounded shrink-0" style={{ background: roleBg, color: roleColor, fontWeight: 700, fontSize: 9 }}>{member.role}</span>
-                    </button>
-                  );
-                })}
+              <div className="text-xs mt-0.5 truncate" style={{ color: c.muted }}>
+                {row.lastSender && <span style={{ fontWeight: 600, color: c.ink }}>{row.lastSender.split(" ")[0]}: </span>}
+                {row.lastMsg || row.description}
               </div>
             </div>
-          )}
+            <ChevronRight size={16} style={{ color: c.line, flexShrink: 0 }} />
+          </button>
+        ))}
+      </div>
 
-          {/* Chat pane */}
-          <div className="flex-1 min-w-0">
-            <ChatPane view={view} key={`${view.type}-${view.id}`} />
-          </div>
-        </div>
+      {/* DMs section */}
+      <div className="mb-1">
+        <SectionLabel>Direct messages</SectionLabel>
+      </div>
+      <div className="rounded-2xl overflow-hidden" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
+        {inbox.filter((r) => r.type === "dm").map((row, i, arr) => {
+          const m = row.member;
+          const roleC = ROLE_COLOR[m.role] ?? c.muted;
+          const roleBg = ROLE_BG[m.role] ?? c.bg;
+          return (
+            <button key={row.id} onClick={() => setOpen({ type: "dm", id: row.id })}
+              className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:opacity-70"
+              style={{ borderBottom: i < arr.length - 1 ? `1px solid ${c.line}` : "none" }}>
+              {/* Avatar */}
+              <div className="relative shrink-0">
+                <div className="grid place-items-center rounded-full font-display text-sm" style={{ width: 44, height: 44, background: m.color, color: "#fff", fontWeight: 800 }}>
+                  {m.initials}
+                </div>
+                {row.unread && (
+                  <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2" style={{ background: c.accent, borderColor: c.surface }} />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm" style={{ fontWeight: row.unread ? 700 : 600 }}>{row.name}</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: roleBg, color: roleC, fontWeight: 700, fontSize: 10 }}>{m.role}</span>
+                  <span className="ml-auto text-xs shrink-0" style={{ color: c.muted }}>{row.lastTime}</span>
+                </div>
+                <div className="text-xs mt-0.5 truncate" style={{ color: row.unread ? c.ink : c.muted, fontWeight: row.unread ? 600 : 400 }}>
+                  {row.lastMsg || <span style={{ fontStyle: "italic" }}>No messages yet — say hi!</span>}
+                </div>
+              </div>
+              <ChevronRight size={16} style={{ color: c.line, flexShrink: 0 }} />
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function ChatPane({ view }) {
+// ---------------- Chat Conversation (full-screen) ----------------
+function ChatConversation({ view, onBack }) {
   const isChannel = view.type === "channel";
   const loadMsgs  = () => isChannel ? loadChannelMsgs(view.id) : loadDmMsgs(view.id);
   const saveMsgs  = (msgs) => isChannel ? saveChannelMsgs(view.id, msgs) : saveDmMsgs(view.id, msgs);
@@ -652,6 +803,11 @@ function ChatPane({ view }) {
   const [input, setInput]       = useState("");
   const bottomRef               = useRef(null);
   const chRef                   = useRef(null);
+
+  const meta   = isChannel ? CHANNELS[view.id] : null;
+  const member = isChannel ? null : (TEAM_MEMBERS[view.id] || { color: c.muted, initials: view.id[0], role: "" });
+  const roleC  = member ? (ROLE_COLOR[member.role] ?? c.muted) : c.primary;
+  const roleBg = member ? (ROLE_BG[member.role] ?? c.bg) : c.primarySoft;
 
   useEffect(() => {
     try {
@@ -675,45 +831,81 @@ function ChatPane({ view }) {
   const grouped = {};
   messages.forEach((m) => { (grouped[m.date] = grouped[m.date] || []).push(m); });
 
-  const placeholder = isChannel
-    ? `Message #${CHANNELS[view.id]?.name ?? view.id}…`
-    : `Message ${view.id}…`;
-
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+    <div className="flex flex-col pb-28" style={{ height: "calc(100dvh - 120px)" }}>
+      {/* Conversation header */}
+      <div className="flex items-center gap-3 mb-3 shrink-0">
+        <button onClick={onBack} className="grid place-items-center rounded-xl shrink-0" style={{ width: 36, height: 36, background: c.bg }}>
+          <ArrowLeft size={18} style={{ color: c.muted }} />
+        </button>
+        {isChannel ? (
+          <div className="grid place-items-center rounded-xl text-xl shrink-0" style={{ width: 40, height: 40, background: c.primarySoft }}>{meta?.icon}</div>
+        ) : (
+          <div className="grid place-items-center rounded-full font-display shrink-0" style={{ width: 40, height: 40, background: member.color, color: "#fff", fontWeight: 800, fontSize: 14 }}>{member.initials}</div>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="font-display text-base leading-tight" style={{ fontWeight: 800 }}>
+            {isChannel ? `#${meta?.name}` : view.id}
+          </div>
+          <div className="text-xs" style={{ color: c.muted }}>
+            {isChannel ? meta?.description : (
+              <span className="px-1.5 py-0.5 rounded-full" style={{ background: roleBg, color: roleC, fontWeight: 700 }}>{member.role}</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full gap-3 py-10" style={{ color: c.muted }}>
+            <MessageSquare size={32} style={{ opacity: 0.3 }} />
+            <p className="text-sm text-center">
+              {isChannel ? `Start the conversation in #${meta?.name}` : `Send ${view.id} a message`}
+            </p>
+          </div>
+        )}
         {Object.entries(grouped).map(([date, msgs]) => (
           <div key={date}>
-            <div className="text-center my-3">
+            <div className="text-center my-4">
               <span className="text-xs px-3 py-1 rounded-full" style={{ background: c.line, color: c.muted }}>{date}</span>
             </div>
             {msgs.map((m, i) => {
-              const isMine  = m.sender === CURRENT_USER;
-              const member  = TEAM_MEMBERS[m.sender] || { color: c.muted, initials: (m.sender || "?")[0], role: "" };
-              const showHdr = i === 0 || msgs[i - 1].sender !== m.sender;
+              const isMine   = m.sender === CURRENT_USER;
+              const sender   = TEAM_MEMBERS[m.sender] || { color: c.muted, initials: (m.sender || "?")[0], role: "" };
+              const showHdr  = !isMine && (i === 0 || msgs[i - 1].sender !== m.sender);
+              const showAvtr = !isMine && (i === msgs.length - 1 || msgs[i + 1].sender !== m.sender);
+              const sRoleC   = ROLE_COLOR[sender.role] ?? c.muted;
+              const sRoleBg  = ROLE_BG[sender.role]   ?? c.bg;
               return (
-                <div key={m.id} className={`flex mb-2 ${isMine ? "justify-end" : "justify-start"}`}>
+                <div key={m.id} className={`flex items-end gap-2 mb-1 ${isMine ? "justify-end" : "justify-start"}`}>
+                  {/* Avatar placeholder keeps alignment for grouped messages */}
                   {!isMine && (
-                    <div className="grid place-items-center rounded-full shrink-0 mr-2 self-end mb-5" style={{ width: 28, height: 28, background: member.color, color: "#fff", fontSize: 9, fontWeight: 800 }}>
-                      {member.initials}
+                    <div className="shrink-0" style={{ width: 32 }}>
+                      {showAvtr && (
+                        <div className="grid place-items-center rounded-full font-display" style={{ width: 32, height: 32, background: sender.color, color: "#fff", fontWeight: 800, fontSize: 11 }}>{sender.initials}</div>
+                      )}
                     </div>
                   )}
-                  <div style={{ maxWidth: "78%" }}>
-                    {!isMine && showHdr && (
-                      <div className="flex items-center gap-1.5 mb-1 ml-0.5">
-                        <span className="text-xs font-medium">{m.sender}</span>
-                        {member.role && (
-                          <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: member.role === "BCBA" ? c.purpleSoft : c.primarySoft, color: member.role === "BCBA" ? c.purple : c.primary, fontWeight: 700, fontSize: 9 }}>{member.role}</span>
-                        )}
+                  <div style={{ maxWidth: "75%" }}>
+                    {showHdr && (
+                      <div className="flex items-center gap-1.5 mb-1 ml-1">
+                        <span className="text-xs" style={{ fontWeight: 700, color: sender.color }}>{m.sender}</span>
+                        {sender.role && <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: sRoleBg, color: sRoleC, fontWeight: 700, fontSize: 9 }}>{sender.role}</span>}
+                        <span className="text-xs" style={{ color: c.muted }}>{m.time}</span>
                       </div>
                     )}
-                    <div className="px-3 py-2 text-sm leading-relaxed" style={{
+                    <div className="px-3.5 py-2.5 text-sm leading-relaxed" style={{
                       background: isMine ? c.primary : c.surface,
                       color: isMine ? "#fff" : c.ink,
                       border: isMine ? "none" : `1px solid ${c.line}`,
-                      borderRadius: isMine ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                      borderRadius: isMine
+                        ? (i === 0 || msgs[i-1].sender !== m.sender ? "18px 18px 4px 18px" : "18px 4px 4px 18px")
+                        : (showHdr ? "4px 18px 18px 18px" : "4px 18px 18px 4px"),
                     }}>{m.text}</div>
-                    <div className={`text-xs mt-0.5 ${isMine ? "text-right" : "ml-0.5"}`} style={{ color: c.muted }}>{m.time}</div>
+                    {isMine && (
+                      <div className="text-right text-xs mt-0.5 mr-1" style={{ color: c.muted }}>{m.time}</div>
+                    )}
                   </div>
                 </div>
               );
@@ -723,12 +915,16 @@ function ChatPane({ view }) {
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex gap-2 pt-2 shrink-0" style={{ borderTop: `1px solid ${c.line}` }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder={placeholder} className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none" style={{ background: c.bg, border: `1px solid ${c.line}` }} />
-        <button onClick={send} disabled={!input.trim()} className="grid place-items-center rounded-xl transition-transform active:scale-95"
-          style={{ width: 40, height: 40, background: input.trim() ? c.primary : c.line, color: "#fff", flexShrink: 0 }}>
-          <Send size={16} />
+      {/* Input */}
+      <div className="flex gap-2 pt-3 shrink-0" style={{ borderTop: `1px solid ${c.line}` }}>
+        <input value={input} onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+          placeholder={isChannel ? `Message #${meta?.name ?? view.id}…` : `Message ${view.id}…`}
+          className="flex-1 px-4 py-3 rounded-2xl text-sm outline-none"
+          style={{ background: c.surface, border: `1px solid ${c.line}`, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }} />
+        <button onClick={send} disabled={!input.trim()} className="grid place-items-center rounded-2xl transition-transform active:scale-95"
+          style={{ width: 46, height: 46, background: input.trim() ? c.primary : c.line, color: "#fff", flexShrink: 0, boxShadow: input.trim() ? `0 2px 8px ${c.primary}44` : "none" }}>
+          <Send size={17} />
         </button>
       </div>
     </div>
@@ -909,9 +1105,22 @@ function LiveSession({ client, onExit }) {
   const [abc, setAbc]         = useState(() => loadSession(client.id)?.abc ?? []);
   const [notes, setNotes]     = useState(() => loadSession(client.id)?.notes ?? []);
   const [secs, setSecs]       = useState(() => loadSession(client.id)?.secs ?? 0);
-  const [ending, setEnding]   = useState(false);
-  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [ending, setEnding]     = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+
+  // Siri-style inline voice entry
+  const [voicePhase, setVoicePhase] = useState(null); // null | "listening" | "stopped" | "busy"
+  const [voiceText, setVoiceText]   = useState("");
+  const [voiceError, setVoiceError] = useState("");
+  const dict = useDictation();
+
+  const startVoice = () => {
+    setVoiceText(""); setVoiceError("");
+    setVoicePhase("listening");
+    dict.start((t) => setVoiceText(t));
+  };
+  const stopVoice   = () => { dict.stop(); setVoicePhase("stopped"); };
+  const dismissVoice = () => { dict.stop(); setVoicePhase(null); setVoiceText(""); setVoiceError(""); };
 
   useEffect(() => { const t = setInterval(() => setSecs((s) => s + 1), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { saveSession(client.id, { programs, behaviors, abc, notes, secs }); }, [programs, behaviors, abc, notes, secs]);
@@ -928,10 +1137,11 @@ function LiveSession({ client, onExit }) {
   const handleExit = () => { clearSession(client.id); onExit(); };
   const handleDone = () => { clearSession(client.id); onExit(); };
 
-  const applyVoiceEntry = ({ trials, behaviors: bds, abcs }) => {
+  const applyVoiceEntry = ({ trials, behaviors: bds, abcs, note }) => {
     if (trials?.length) setPrograms((ps) => ps.map((p) => { const t = trials.find((t) => t.programId === p.id); return t ? { ...p, trials: [...p.trials, ...t.marks] } : p; }));
     if (bds?.length)    setBehaviors((bs) => bs.map((b) => { const bd = bds.find((d) => d.behaviorId === b.id); return bd ? { ...b, count: Math.max(0, b.count + (bd.delta || 0)) } : b; }));
     if (abcs?.length)   { const ts = now(); setAbc((a) => [...abcs.map((e) => ({ ...e, time: ts })), ...a]); }
+    if (note?.trim())   setNotes((n) => [...n, { text: note.trim(), time: now() }]);
   };
 
   const sessionTabs = [
@@ -966,83 +1176,186 @@ function LiveSession({ client, onExit }) {
         {tab === "ai"        && <AINotesPage   client={client} programs={programs} behaviors={behaviors} abc={abc} notes={notes} onAddNote={addNote} />}
       </div>
 
-      {/* Floating voice entry */}
-      <button onClick={() => setVoiceOpen(true)} className="fixed bottom-6 right-4 z-20 flex items-center gap-2 px-4 py-3 rounded-full transition-transform active:scale-95"
-        style={{ background: c.ink, color: "#fff", fontWeight: 700, boxShadow: "0 4px 20px rgba(0,0,0,0.25)" }}>
-        <Mic size={17} /><span className="text-sm">Voice entry</span>
-      </button>
+      {/* Pulsating orange border — alive while voice is active */}
+      {voicePhase && (
+        <div className="fixed inset-0 pointer-events-none z-30"
+          style={{ border: "6px solid #F97316", animation: "bh-glow-pulse 1.4s ease-in-out infinite",
+            boxShadow: "0 0 0 6px #F97316, 0 0 50px 16px rgba(249,115,22,0.5)", borderRadius: 0 }} />
+      )}
 
-      {voiceOpen  && <VoiceEntryModal programs={programs} behaviors={behaviors} onApply={applyVoiceEntry} onClose={() => setVoiceOpen(false)} />}
+      {/* Voice card — text box + Stop + Submit only */}
+      {voicePhase && voicePhase !== "busy" && (
+        <div className="fixed bottom-24 left-4 right-4 z-40 rounded-2xl p-4"
+          style={{ background: "rgba(20,38,34,0.97)", backdropFilter: "blur(14px)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full" style={{ background: voicePhase === "listening" ? "#F97316" : "#555", animation: voicePhase === "listening" ? "bh-mic-ring 1.4s ease-in-out infinite" : "none" }} />
+              <span className="text-xs" style={{ color: voicePhase === "listening" ? "#F97316" : "#888", fontWeight: 700 }}>
+                {voicePhase === "listening" ? "Listening…" : "Done — tap Submit"}
+              </span>
+            </div>
+            <button onClick={dismissVoice} style={{ color: "#666" }}><X size={16} /></button>
+          </div>
+
+          <textarea readOnly={voicePhase === "listening"} value={voiceText}
+            onChange={(e) => setVoiceText(e.target.value)}
+            rows={3} placeholder="Speak naturally — programs, prompts, behaviors…"
+            className="w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none"
+            style={{ background: "rgba(255,255,255,0.06)", border: `1px solid ${voicePhase === "listening" ? "#F97316" : "rgba(255,255,255,0.12)"}`, color: "#fff" }} />
+
+          {voiceError && <p className="text-xs mt-2" style={{ color: "#F97316" }}>{voiceError}</p>}
+
+          <div className="flex gap-2 mt-3">
+            {voicePhase === "listening"
+              ? <button onClick={stopVoice} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm"
+                  style={{ background: "#F97316", color: "#fff", fontWeight: 700 }}>
+                  <MicOff size={15} /> Stop
+                </button>
+              : <>
+                  <button onClick={startVoice} className="grid place-items-center rounded-xl shrink-0"
+                    style={{ width: 44, height: 44, background: "rgba(255,255,255,0.08)", color: "#aaa" }}>
+                    <Mic size={17} />
+                  </button>
+                  <button onClick={async () => { setVoicePhase("busy"); try { const p = await parseVoiceEntry(voiceText, programs, behaviors); applyVoiceEntry(p); dismissVoice(); } catch (e) { setVoiceError(e instanceof Error ? e.message : "Couldn't reach AI."); setVoicePhase("stopped"); } }}
+                    disabled={!voiceText.trim()}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm"
+                    style={{ background: voiceText.trim() ? c.primary : "#333", color: "#fff", fontWeight: 700 }}>
+                    <Check size={15} /> Submit
+                  </button>
+                </>}
+          </div>
+        </div>
+      )}
+
+      {/* Busy submitting */}
+      {voicePhase === "busy" && (
+        <div className="fixed bottom-24 left-4 right-4 z-40 rounded-2xl p-4 flex items-center gap-3"
+          style={{ background: "rgba(20,38,34,0.97)", backdropFilter: "blur(14px)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+          <Loader2 size={18} className="animate-spin" style={{ color: c.primary }} />
+          <span className="text-sm" style={{ color: "#fff", fontWeight: 600 }}>Submitting…</span>
+        </div>
+      )}
+
+      {/* FAB — voice entry button */}
+      {!voicePhase && (
+        <button onClick={startVoice} className="fixed bottom-6 right-4 z-40 flex items-center gap-2 px-4 py-3 rounded-full active:scale-95"
+          style={{ background: c.ink, color: "#fff", fontWeight: 700, boxShadow: "0 4px 20px rgba(0,0,0,0.25)" }}>
+          <Mic size={17} /><span className="text-sm">Voice entry</span>
+        </button>
+      )}
+
       {shareOpen  && <ShareModal clientId={client.id} onClose={() => setShareOpen(false)} />}
       {ending     && <EndSessionModal client={client} duration={`${mm}:${ss}`} programs={programs} behaviors={behaviors} abc={abc} notes={notes} onClose={() => setEnding(false)} onDone={handleDone} />}
     </div>
   );
 }
 
-// ---------------- Voice Entry Modal ----------------
-function VoiceEntryModal({ programs, behaviors, onApply, onClose }) {
-  const [text, setText]   = useState("");
-  const [parsed, setParsed] = useState(null);
-  const [busy, setBusy]   = useState(false);
-  const [error, setError] = useState("");
+// ---------------- Global AI Assistant ----------------
+// Accessible from any screen — context-aware based on navTab / current client
+function GlobalAIButton({ navTab, client }) {
+  const [open, setOpen]     = useState(false);
+  const [text, setText]     = useState("");
+  const [reply, setReply]   = useState("");
+  const [busy, setBusy]     = useState(false);
+  const [error, setError]   = useState("");
   const dict = useDictation();
 
-  const parse = async () => {
-    if (!text.trim()) return;
-    setBusy(true); setError(""); setParsed(null);
-    try { setParsed(await parseVoiceEntry(text, programs, behaviors)); }
-    catch { setError("Couldn't parse your note. Try being more specific about program names."); }
+  const context = () => {
+    if (client) return `The clinician is viewing the client hub for ${client.name}, age ${client.age}. Past session data: ${JSON.stringify(PAST_SESSIONS[client.id] ?? [])}. Documents: ${JSON.stringify(DOCUMENTS[client.id] ?? [])}. Protocols: ${JSON.stringify(PROTOCOLS[client.id] ?? [])}.`;
+    if (navTab === "schedule") {
+      const today = new Date().toISOString().split("T")[0];
+      const todaySessions = SCHEDULE.filter((s) => s.date === today).map((s) => { const cl = CLIENTS.find((c) => c.id === s.clientId); return `${cl?.name} ${s.startTime}–${s.endTime}`; });
+      return `The clinician is on the Schedule screen. Today's sessions: ${todaySessions.join(", ") || "none"}. They have ${CLIENTS.length} active clients: ${CLIENTS.map((c) => c.name).join(", ")}.`;
+    }
+    if (navTab === "clients") return `The clinician is on the Clients screen. Active clients: ${CLIENTS.map((cl) => `${cl.name} (age ${cl.age}, ${cl.programs} programs)`).join("; ")}.`;
+    if (navTab === "chat") return `The clinician is on the Team Chat screen. Team members: ${Object.entries(TEAM_MEMBERS).map(([n, m]) => `${n} (${m.role})`).join(", ")}.`;
+    return "The clinician is using Behavior Hub, an ABA data collection app.";
+  };
+
+  const ask = async (input) => {
+    const q = (input ?? text).trim();
+    if (!q) return;
+    setBusy(true); setReply(""); setError("");
+    try {
+      setReply(await askClaude(`You are an expert ABA clinical assistant inside Behavior Hub, a data collection app for RBTs and BCBAs. Answer concisely and clinically. Use ABA terminology correctly. If asked to draft something (message, note, letter), produce the draft directly.
+
+CONTEXT: ${context()}
+
+You are fluent in all ABA terminology including: ABC data, antecedent/behavior/consequence, escape/attention/tangible/sensory functions, DTT, NET, manding, tacting, echoic, intraverbal, prompt hierarchy (independent, gestural, verbal, model, partial physical, full physical), prompt fading, differential reinforcement (DRO, DRA, DRI, DRL), FCT, extinction, extinction burst, EO/MO, SD/S-delta, chaining, shaping, generalization, token economy, FBA, VB-MAPP, ABLLS, preference assessment, IOA, baseline, probe data, rate, frequency, duration, latency, partial/whole interval recording, momentary time sampling, NCR, behavioral momentum, high-p sequence, social validity, treatment integrity, behavior contract, and all BACB task list content.
+
+Clinician's request: "${q}"`));
+    } catch (e) { setError(e instanceof Error ? e.message : "Couldn't reach the AI."); }
     finally { setBusy(false); }
   };
 
+  const handleVoice = () => {
+    if (dict.listening) { dict.stop(); ask(text); }
+    else { setText(""); setReply(""); dict.start((t) => setText(t)); }
+  };
+
+  if (!open) return (
+    <button onClick={() => setOpen(true)} className="fixed bottom-20 right-4 z-40 flex items-center gap-2 px-4 py-3 rounded-full active:scale-95"
+      style={{ background: c.ink, color: "#fff", fontWeight: 700, boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>
+      <Sparkles size={17} /><span className="text-sm">Ask AI</span>
+    </button>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3" style={{ background: "rgba(26,46,43,0.5)" }}>
-      <div className="w-full max-w-lg rounded-2xl p-5 max-h-[90vh] overflow-auto" style={{ background: c.surface }}>
-        <div className="flex items-center justify-between mb-1">
-          <div className="font-display text-xl" style={{ fontWeight: 800 }}>Voice entry</div>
-          <button onClick={onClose} className="grid place-items-center rounded-lg" style={{ width: 32, height: 32, background: c.bg }}><X size={18} /></button>
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-3 pb-6" style={{ background: "rgba(26,46,43,0.5)" }}>
+      <div className="w-full max-w-lg rounded-2xl overflow-hidden" style={{ background: "rgba(20,40,36,0.97)", backdropFilter: "blur(16px)" }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} style={{ color: c.primary }} />
+            <span className="text-sm" style={{ color: "#fff", fontWeight: 700 }}>AI Assistant</span>
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(14,159,143,0.2)", color: c.primary, fontWeight: 600 }}>
+              {client ? client.name : navTab === "schedule" ? "Schedule" : navTab === "clients" ? "Clients" : "Team"}
+            </span>
+          </div>
+          <button onClick={() => { setOpen(false); dict.stop(); setText(""); setReply(""); setError(""); }} style={{ color: "#666" }}><X size={18} /></button>
         </div>
-        <p className="text-sm mb-3" style={{ color: c.muted }}>Describe what happened — programs, prompts, behaviors. AI parses it into your session data.</p>
-        <div className="relative">
-          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
-            placeholder="e.g. Jordan got compliance independently, needed a model on gross and fine motor, got all the animals, had two elopements during transitions…"
-            className="w-full p-3 pr-14 rounded-xl text-sm outline-none resize-none" style={{ background: c.bg, border: `1px solid ${dict.listening ? c.accent : c.line}` }} />
-          <button onClick={dict.listening ? dict.stop : () => dict.start(setText)} className="absolute bottom-3 right-3 grid place-items-center rounded-lg" style={{ width: 36, height: 36, background: dict.listening ? c.ink : c.accent, color: "#fff" }}>
-            {dict.listening ? <MicOff size={16} /> : <Mic size={16} />}
-          </button>
-        </div>
-        {dict.listening && <div className="text-xs mt-1" style={{ color: c.accent, fontWeight: 600 }}>● Listening…</div>}
-        {error && <div className="text-sm mt-3 p-3 rounded-xl" style={{ background: c.accentSoft, color: c.accent }}>{error}</div>}
-        {!parsed ? (
-          <button onClick={parse} disabled={busy || !text.trim()} className="w-full mt-3 flex items-center justify-center gap-2 py-3 rounded-xl text-sm transition-transform active:scale-95"
-            style={{ background: text.trim() ? c.primary : c.line, color: "#fff", fontWeight: 700 }}>
-            {busy ? <><Loader2 size={15} className="animate-spin" /> Parsing…</> : <><Sparkles size={15} /> Parse with AI</>}
-          </button>
-        ) : (
-          <div className="mt-3">
-            <div className="p-3 rounded-xl" style={{ background: c.primarySoft }}>
-              <div className="text-sm font-medium mb-2" style={{ color: c.primary }}>Ready to log:</div>
-              {parsed.summary && <p className="text-sm mb-2">{parsed.summary}</p>}
-              <div className="grid gap-1">
-                {parsed.trials?.map((t) => { const prog = programs.find((p) => p.id === t.programId); if (!prog) return null; const pl = t.marks.filter((m) => m === "+").length; const mi = t.marks.filter((m) => m === "-").length; return (
-                  <div key={t.programId} className="flex items-center gap-2 text-xs">
-                    <span style={{ fontWeight: 600 }}>{prog.name}</span>
-                    {pl > 0 && <span className="px-1.5 py-0.5 rounded" style={{ background: c.plus, color: "#fff", fontWeight: 700 }}>+{pl}</span>}
-                    {mi > 0 && <span className="px-1.5 py-0.5 rounded" style={{ background: c.minus, color: "#fff", fontWeight: 700 }}>−{mi}</span>}
-                  </div>
-                ); })}
-                {parsed.behaviors?.filter((bd) => bd.delta > 0).map((bd) => { const beh = behaviors.find((b) => b.id === bd.behaviorId); if (!beh) return null; return <div key={bd.behaviorId} className="text-xs"><span style={{ fontWeight: 600 }}>{beh.name}:</span> +{bd.delta}</div>; })}
-                {parsed.abcs?.length > 0 && <div className="text-xs" style={{ color: c.muted }}>{parsed.abcs.length} ABC event{parsed.abcs.length > 1 ? "s" : ""}</div>}
-              </div>
-            </div>
-            <div className="flex gap-2 mt-3">
-              <button onClick={() => setParsed(null)} className="flex-1 py-2.5 rounded-xl text-sm" style={{ background: c.bg, color: c.muted, fontWeight: 600 }}>Edit</button>
-              <button onClick={() => { onApply(parsed); onClose(); }} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm active:scale-95" style={{ background: c.plus, color: "#fff", fontWeight: 700 }}>
-                <Check size={16} /> Apply to session
-              </button>
-            </div>
+
+        {/* Suggestions */}
+        {!reply && !busy && (
+          <div className="px-4 pb-3 flex gap-2 flex-wrap">
+            {(client
+              ? [`Summarize ${client.name.split(" ")[0]}'s progress`, `What are the behavior protocols?`, `Draft a parent update`]
+              : navTab === "schedule"
+                ? ["What's on my schedule today?", "Prep tips for my next session", "Explain behavioral momentum"]
+                : navTab === "clients"
+                  ? ["Which client needs the most attention?", "Explain DRO vs DRA", "What is FCT?"]
+                  : ["Draft a message to Dr. Martinez", "What is extinction burst?", "Explain high-p sequence"]
+            ).map((s) => (
+              <button key={s} onClick={() => { setText(s); ask(s); }} className="text-xs px-3 py-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.08)", color: "#ccc", border: "1px solid rgba(255,255,255,0.1)" }}>{s}</button>
+            ))}
           </div>
         )}
+
+        {/* Reply */}
+        {(busy || reply || error) && (
+          <div className="px-4 pb-3 max-h-60 overflow-y-auto">
+            {busy && <div className="flex items-center gap-2 text-sm" style={{ color: "#888" }}><Loader2 size={14} className="animate-spin" style={{ color: c.primary }} /> Thinking…</div>}
+            {reply && <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#e0e0e0" }}>{reply}</p>}
+            {error && <p className="text-sm" style={{ color: "#F97316" }}>{error}</p>}
+          </div>
+        )}
+
+        {/* Input */}
+        <div className="flex gap-2 px-4 pb-4 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          <input value={text} onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } }}
+            placeholder="Ask anything — session prep, ABA terms, draft a message…"
+            className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none"
+            style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff" }} />
+          <button onClick={handleVoice} className={`grid place-items-center rounded-xl shrink-0 ${dict.listening ? "bh-mic-pulse" : ""}`}
+            style={{ width: 40, height: 40, background: dict.listening ? "#F97316" : "rgba(255,255,255,0.1)", color: "#fff" }}>
+            {dict.listening ? <MicOff size={16} /> : <Mic size={16} />}
+          </button>
+          <button onClick={() => ask()} disabled={busy || !text.trim()} className="grid place-items-center rounded-xl shrink-0 active:scale-95"
+            style={{ width: 40, height: 40, background: text.trim() ? c.primary : "rgba(255,255,255,0.08)", color: "#fff" }}>
+            <Send size={16} />
+          </button>
+        </div>
       </div>
     </div>
   );

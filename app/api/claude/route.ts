@@ -3,15 +3,36 @@ import { NextRequest, NextResponse } from "next/server";
 // Allow the AI call up to 30s to finish on Vercel.
 export const maxDuration = 30;
 
+function friendlyError(status: number, rawMessage: string): string {
+  // Credit / quota exhausted
+  if (status === 429 || rawMessage?.toLowerCase().includes("credit") || rawMessage?.toLowerCase().includes("quota") || rawMessage?.toLowerCase().includes("billing")) {
+    return "AI features are temporarily unavailable. Please try again in a moment.";
+  }
+  // Overloaded
+  if (status === 529 || rawMessage?.toLowerCase().includes("overloaded")) {
+    return "The AI is busy right now. Wait a few seconds and tap Retry.";
+  }
+  // Auth / key issues — never show raw key errors to users
+  if (status === 401 || status === 403) {
+    return "AI features are temporarily unavailable. Please try again later.";
+  }
+  // Generic server error
+  if (status >= 500) {
+    return "Something went wrong on our end. Tap Retry — it usually clears up quickly.";
+  }
+  return "Couldn't complete the AI request. Tap Retry to try again.";
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { prompt } = await req.json();
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
+      // Never expose missing-key details to end users
       return NextResponse.json(
-        { error: "Server is missing ANTHROPIC_API_KEY. Add it to .env.local (local) and to your Vercel project settings (live)." },
-        { status: 500 }
+        { error: "AI features are temporarily unavailable. Please try again later." },
+        { status: 503 }
       );
     }
 
@@ -32,8 +53,9 @@ export async function POST(req: NextRequest) {
     const data = await res.json();
 
     if (!res.ok) {
+      const raw = data?.error?.message ?? "";
       return NextResponse.json(
-        { error: data?.error?.message || "Anthropic API error" },
+        { error: friendlyError(res.status, raw) },
         { status: res.status }
       );
     }
@@ -46,7 +68,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ text });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Unknown server error" },
+      { error: "Couldn't reach the AI. Check your connection and tap Retry." },
       { status: 500 }
     );
   }

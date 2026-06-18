@@ -7,7 +7,7 @@ import {
   ClipboardList, Activity, ChevronRight, TrendingUp, Loader2,
   BookOpen, Brain, Undo2, FileSignature, Calendar, Check, X,
   ChevronDown, RotateCcw, Eye, MessageSquare, Shield, Zap, Copy,
-  Users, MapPin, Navigation, Send, Clock,
+  Users, MapPin, Navigation, Send, Clock, CalendarPlus, UserCog, ChevronLeft,
 } from "lucide-react";
 
 // ---------------- Palette (happy + professional) ----------------
@@ -127,6 +127,96 @@ const PROTOCOLS = {
   c2: [{ title: "Functional communication — requesting", body: "Context: natural motivating operations (child is interested in preferred item). Target: spontaneous request using full word, approximation, or AAC. Never withhold for perfect pronunciation — honor any clear communicative attempt. Mastery: 80% unprompted, generalized across 3 environments and 2 communication partners." }],
   c3: [{ title: "Waiting with support", body: "SD: 'Just a moment' + visual timer. Target: tolerate a 30-second delay before receiving preferred item without challenging behavior. Prompt: gestural cue toward timer → verbal reminder 'almost time.' Reinforce waiting with preferred item + specific verbal praise ('Great waiting!'). Increase delay gradually in 10-second increments as tolerance builds." }],
 };
+
+// ---------------- BCBA Infrastructure data ----------------
+const STAFF_DETAILS = {
+  "Tucker":       { clients: ["c1", "c2", "c3"], hoursWeek: 22.5, certExp: "2027-03-15", supervisionHours: 3.5 },
+  "Kayla R.":     { clients: ["c2", "c3"],        hoursWeek: 18.0, certExp: "2026-09-01", supervisionHours: 2.0 },
+  "Sam T.":       { clients: ["c1", "c3"],        hoursWeek: 15.5, certExp: "2027-01-20", supervisionHours: 1.5 },
+  "Jamie L.":     { clients: ["c1"],              hoursWeek: 10.0, certExp: "2026-11-30", supervisionHours: 1.0 },
+  "Dr. Martinez": { clients: ["c1", "c2", "c3"], hoursWeek: 8.0,  certExp: "2028-06-01", supervisionHours: null },
+  "Dr. Chen":     { clients: ["c2"],              hoursWeek: 4.0,  certExp: "2028-02-14", supervisionHours: null },
+  "Priya N.":     { clients: ["c1"],              hoursWeek: 6.0,  certExp: "2027-05-10", supervisionHours: null },
+  "Marcus W.":    { clients: ["c3"],              hoursWeek: 5.0,  certExp: "2027-08-22", supervisionHours: null },
+  "Dr. Okonkwo":  { clients: ["c2"],              hoursWeek: 2.0,  certExp: "2029-01-01", supervisionHours: null },
+};
+
+const SCHED_KEY = "bh_schedule_v2";
+function loadSchedule() {
+  try { const r = typeof window !== "undefined" ? localStorage.getItem(SCHED_KEY) : null; return r ? JSON.parse(r) : null; } catch { return null; }
+}
+function saveSchedule(sessions) {
+  try { localStorage.setItem(SCHED_KEY, JSON.stringify(sessions)); } catch {}
+}
+function getWeekDays(baseDate) {
+  const d = new Date(baseDate + "T12:00:00");
+  const day = d.getDay();
+  const mon = new Date(d); mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  return Array.from({ length: 7 }, (_, i) => { const nd = new Date(mon); nd.setDate(mon.getDate() + i); return nd.toISOString().split("T")[0]; });
+}
+function certDaysLeft(exp) { return Math.ceil((new Date(exp) - new Date()) / (1000 * 60 * 60 * 24)); }
+// ---------------- Auth ----------------
+const PINS = {
+  "Tucker":       "1234",
+  "Kayla R.":     "2345",
+  "Sam T.":       "3456",
+  "Jamie L.":     "4567",
+  "Dr. Martinez": "0000",
+  "Dr. Chen":     "9999",
+};
+const BH_AUTH = "bh_auth_v1";
+function getStoredUser() { try { return JSON.parse(sessionStorage?.getItem(BH_AUTH) || "null"); } catch { return null; } }
+function storeUser(u)    { try { sessionStorage.setItem(BH_AUTH, JSON.stringify(u)); } catch {} }
+function clearStoredUser(){ try { sessionStorage.removeItem(BH_AUTH); } catch {} }
+
+// ---------------- Extra clients (user-added) ----------------
+const EXTRA_CLIENTS_KEY = "bh_extra_clients_v1";
+function loadExtraClients() { try { const r = localStorage.getItem(EXTRA_CLIENTS_KEY); return r ? JSON.parse(r) : []; } catch { return []; } }
+function saveExtraClients(arr) { try { localStorage.setItem(EXTRA_CLIENTS_KEY, JSON.stringify(arr)); } catch {} }
+
+// ---------------- Session notes archive ----------------
+const NOTE_KEY = (clientId, date) => `bh_note_${clientId}_${date}`;
+function saveNoteRecord(clientId, { date, duration, note, skillPct, behaviors }) {
+  try { localStorage.setItem(NOTE_KEY(clientId, date), JSON.stringify({ date, duration, note, skillPct, behaviors, saved: new Date().toISOString() })); } catch {}
+}
+function loadNoteRecords(clientId) {
+  const out = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(`bh_note_${clientId}_`)) {
+        const v = localStorage.getItem(k);
+        if (v) out.push(JSON.parse(v));
+      }
+    }
+  } catch {}
+  return out.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+// ---------------- Notifications ----------------
+async function requestNotifPermission() {
+  if (!("Notification" in window)) return false;
+  return (await Notification.requestPermission()) === "granted";
+}
+function scheduleSessionNotifs(sessions, clients) {
+  if (typeof window === "undefined" || Notification.permission !== "granted") return;
+  const now = Date.now();
+  sessions.filter((s) => s.status === "upcoming").forEach((s) => {
+    const cl = clients.find((c) => c.id === s.clientId);
+    const [time, period] = s.startTime.split(" ");
+    let [h, m] = time.split(":").map(Number);
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    const sessionMs = new Date(s.date + "T00:00:00").getTime() + h * 3600000 + m * 60000;
+    const remindMs  = sessionMs - 30 * 60000;
+    const delay = remindMs - now;
+    if (delay > 0 && delay < 24 * 3600000) {
+      setTimeout(() => {
+        new Notification("Session in 30 min", { body: `${cl?.name ?? "Client"} · ${s.startTime}`, icon: "/icon.svg" });
+      }, delay);
+    }
+  });
+}
 
 // ---------------- Team chat seed data ----------------
 const CURRENT_USER = "Tucker";
@@ -377,32 +467,40 @@ Therapist note: "${text}"`);
 
 // ================= APP =================
 export default function BehaviorHubRBT() {
+  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
   const [navTab, setNavTab]       = useState("schedule");
-  const [screen, setScreen]       = useState("main"); // main | clientHub | session
+  const [screen, setScreen]       = useState("main");
   const [client, setClient]       = useState(null);
   const [backTo, setBackTo]       = useState("schedule");
-  const [chatBadge, setChatBadge] = useState(true); // show unread dot until chat is visited
+  const [chatBadge, setChatBadge] = useState(true);
   const [supervisorClientId, setSupervisorClientId] = useState(null);
+  const [schedule, setSchedule]   = useState(() => loadSchedule() ?? SCHEDULE);
+  const [addingSession, setAddingSession] = useState(false);
+  const [extraClients, setExtraClients]   = useState(() => loadExtraClients());
+  const [addingClient, setAddingClient]   = useState(false);
+  const [notifGranted, setNotifGranted]   = useState(false);
 
-  // Swipe gesture
+  const allClients = [...CLIENTS, ...extraClients];
+
+  const login  = (u) => { storeUser(u);    setCurrentUser(u); };
+  const logout = ()  => { clearStoredUser(); setCurrentUser(null); };
+
+  const addSession = (sess) => { const u = [...schedule, sess]; setSchedule(u); saveSchedule(u); };
+  const addClient  = (cl)   => { const u = [...extraClients, cl]; setExtraClients(u); saveExtraClients(u); };
+
   const touchX = useRef(null);
-  const TABS = ["schedule", "clients", "chat"];
+  const TABS = ["schedule", "clients", "chat", "staff"];
   const handleTouchStart = (e) => { if (screen === "main") touchX.current = e.touches[0].clientX; };
   const handleTouchEnd   = (e) => {
     if (screen !== "main" || touchX.current === null) return;
     const dx = e.changedTouches[0].clientX - touchX.current;
     const idx = TABS.indexOf(navTab);
-    if (dx < -60 && idx < 2) switchTab(TABS[idx + 1]);
+    if (dx < -60 && idx < TABS.length - 1) switchTab(TABS[idx + 1]);
     if (dx >  60 && idx > 0) switchTab(TABS[idx - 1]);
     touchX.current = null;
   };
 
-  const switchTab = (tab) => {
-    setNavTab(tab);
-    setScreen("main");
-    if (tab === "chat") setChatBadge(false);
-  };
-
+  const switchTab = (tab) => { setNavTab(tab); setScreen("main"); if (tab === "chat") setChatBadge(false); };
   const goToClientHub = (cl, from) => { setClient(cl); setBackTo(from ?? navTab); setScreen("clientHub"); };
   const goToSession   = (cl) => { setClient(cl); setScreen("session"); };
   const goBack        = () => { setScreen("main"); setNavTab(backTo); };
@@ -410,14 +508,28 @@ export default function BehaviorHubRBT() {
   useEffect(() => {
     const cid = new URLSearchParams(window.location.search).get("supervisor");
     if (cid) setSupervisorClientId(cid);
+    setNotifGranted(typeof Notification !== "undefined" && Notification.permission === "granted");
   }, []);
 
+  useEffect(() => {
+    if (notifGranted) scheduleSessionNotifs(schedule, allClients);
+  }, [notifGranted, schedule]);
+
   if (supervisorClientId) {
-    const sc = CLIENTS.find((cl) => cl.id === supervisorClientId);
+    const sc = allClients.find((cl) => cl.id === supervisorClientId);
     return (
       <div className="font-body min-h-screen w-full" style={{ background: c.bg, color: c.ink }}>
         <style>{FONTS}</style>
         <div className="max-w-3xl mx-auto px-4 py-5"><SupervisorView client={sc} /></div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="font-body min-h-screen w-full" style={{ background: c.bg, color: c.ink }}>
+        <style>{FONTS}</style>
+        <LoginScreen onLogin={login} />
       </div>
     );
   }
@@ -427,16 +539,25 @@ export default function BehaviorHubRBT() {
       onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       <style>{FONTS}</style>
 
-      {/* Main content */}
       <div className="max-w-xl mx-auto px-4 pt-5">
         {screen === "main" && navTab === "schedule" && (
-          <ScheduleScreen onStartSession={(cl) => goToSession(cl)} onViewClient={(cl) => goToClientHub(cl, "schedule")} />
+          <ScheduleScreen
+            schedule={schedule} clients={allClients} currentUser={currentUser}
+            onStartSession={(cl) => goToSession(cl)}
+            onViewClient={(cl) => goToClientHub(cl, "schedule")}
+            onAddSession={() => setAddingSession(true)}
+            onLogout={logout}
+            notifGranted={notifGranted}
+            onRequestNotifs={async () => { const ok = await requestNotifPermission(); setNotifGranted(ok); }}
+          />
         )}
         {screen === "main" && navTab === "clients" && (
-          <ClientsScreen onOpen={(cl) => goToClientHub(cl, "clients")} />
+          <ClientsScreen clients={allClients} onOpen={(cl) => goToClientHub(cl, "clients")} onAddClient={() => setAddingClient(true)} />
         )}
         {screen === "main" && navTab === "chat" && <ChatScreen />}
-
+        {screen === "main" && navTab === "staff" && (
+          <StaffScreen clients={allClients} onOpenClient={(cl, from) => goToClientHub(cl, from ?? "staff")} />
+        )}
         {screen === "clientHub" && client && (
           <ClientHub client={client} onBack={goBack} onStart={() => goToSession(client)} />
         )}
@@ -445,15 +566,10 @@ export default function BehaviorHubRBT() {
         )}
       </div>
 
-      {/* Bottom nav — hide during session */}
-      {screen !== "session" && (
-        <BottomNav tab={navTab} onChange={switchTab} chatBadge={chatBadge} />
-      )}
-
-      {/* Global AI button — all screens except live session */}
-      {screen !== "session" && (
-        <GlobalAIButton navTab={navTab} client={screen === "clientHub" ? client : null} />
-      )}
+      {screen !== "session" && <BottomNav tab={navTab} onChange={switchTab} chatBadge={chatBadge} />}
+      {screen !== "session" && <GlobalAIButton navTab={navTab} client={screen === "clientHub" ? client : null} />}
+      {addingSession && <AddSessionModal onClose={() => setAddingSession(false)} onAdd={addSession} />}
+      {addingClient  && <AddClientModal  onClose={() => setAddingClient(false)}  onAdd={addClient}  />}
     </div>
   );
 }
@@ -464,6 +580,7 @@ function BottomNav({ tab, onChange, chatBadge }) {
     { k: "schedule", label: "Schedule", icon: Calendar },
     { k: "clients",  label: "Clients",  icon: Users },
     { k: "chat",     label: "Chat",     icon: MessageSquare },
+    { k: "staff",    label: "Team",     icon: UserCog },
   ];
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 flex" style={{ background: c.surface, borderTop: `1px solid ${c.line}`, paddingBottom: "env(safe-area-inset-bottom,8px)" }}>
@@ -485,19 +602,20 @@ function BottomNav({ tab, onChange, chatBadge }) {
 }
 
 // ---------------- Schedule Screen ----------------
-function ScheduleScreen({ onStartSession, onViewClient }) {
-  const [showPast, setShowPast] = useState(false);
+function ScheduleScreen({ schedule, clients, currentUser, onStartSession, onViewClient, onAddSession, onLogout, notifGranted, onRequestNotifs }) {
+  const [showPast, setShowPast]   = useState(false);
+  const [viewMode, setViewMode]   = useState("list");
   const today = new Date().toISOString().split("T")[0];
   const h = new Date().getHours();
   const greet = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+  const allClients = clients ?? CLIENTS;
 
-  const todaySessions    = SCHEDULE.filter((s) => s.date === today);
-  const upcomingSessions = SCHEDULE.filter((s) => s.date > today).sort((a, b) => a.date.localeCompare(b.date));
-  const pastSessions     = SCHEDULE.filter((s) => s.date < today).sort((a, b) => b.date.localeCompare(a.date));
-  const completedSessions = SCHEDULE.filter((s) => s.status === "completed");
+  const todaySessions    = schedule.filter((s) => s.date === today);
+  const upcomingSessions = schedule.filter((s) => s.date > today).sort((a, b) => a.date.localeCompare(b.date));
+  const pastSessions     = schedule.filter((s) => s.date < today).sort((a, b) => b.date.localeCompare(a.date));
+  const completedSessions = schedule.filter((s) => s.status === "completed");
   const thisWeekDone      = completedSessions.length;
 
-  // Calculate total hours from completed sessions
   const parseHour = (t) => {
     const [time, period] = t.split(" ");
     let [h, m] = time.split(":").map(Number);
@@ -513,15 +631,25 @@ function ScheduleScreen({ onStartSession, onViewClient }) {
     return Object.entries(m);
   };
 
-  const clientFor = (s) => CLIENTS.find((cl) => cl.id === s.clientId);
+  const clientFor = (s) => allClients.find((cl) => cl.id === s.clientId);
 
   return (
     <div className="pb-28">
       {/* Greeting card */}
       <div className="rounded-2xl p-5 mb-5" style={{ background: `linear-gradient(135deg, ${c.primary} 0%, #0A7A6E 100%)`, color: "#fff" }}>
-        <div className="text-sm mb-0.5" style={{ opacity: 0.8 }}>{greet}</div>
-        <div className="font-display text-2xl" style={{ fontWeight: 800 }}>Tucker Narkinsky</div>
-        <div className="text-sm mt-0.5" style={{ opacity: 0.75 }}>RBT · Cayer Behavioral Group</div>
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="text-sm mb-0.5" style={{ opacity: 0.8 }}>{greet}</div>
+            <div className="font-display text-2xl" style={{ fontWeight: 800 }}>{currentUser?.name ?? "Tucker Narkinsky"}</div>
+            <div className="text-sm mt-0.5" style={{ opacity: 0.75 }}>{currentUser?.role ?? "RBT"} · Cayer Behavioral Group</div>
+          </div>
+          <div className="flex flex-col items-end gap-1.5">
+            <button onClick={onLogout} className="px-2.5 py-1 rounded-lg text-xs" style={{ background: "rgba(255,255,255,0.18)", color: "#fff", fontWeight: 600 }}>Sign out</button>
+            {!notifGranted && (
+              <button onClick={onRequestNotifs} className="px-2.5 py-1 rounded-lg text-xs" style={{ background: "rgba(255,255,255,0.18)", color: "#fff", fontWeight: 600 }}>🔔 Reminders</button>
+            )}
+          </div>
+        </div>
         <div className="flex gap-5 mt-4">
           <div className="text-center">
             <div className="font-display text-2xl" style={{ fontWeight: 800 }}>{totalHours % 1 === 0 ? totalHours : totalHours.toFixed(1)}</div>
@@ -538,43 +666,70 @@ function ScheduleScreen({ onStartSession, onViewClient }) {
         </div>
       </div>
 
-      {/* Today */}
-      {todaySessions.length > 0 && (
-        <div className="mb-5">
-          <SectionLabel>Today</SectionLabel>
-          {todaySessions.map((s) => <SessionCard key={s.id} session={s} client={clientFor(s)} onStart={() => onStartSession(clientFor(s))} onViewClient={() => onViewClient(clientFor(s))} />)}
+      {/* View controls row */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex gap-1 p-1 rounded-xl" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
+          {[{ v: "list", label: "List" }, { v: "week", label: "Week" }].map(({ v, label }) => (
+            <button key={v} onClick={() => setViewMode(v)} className="px-3 py-1.5 rounded-lg text-xs"
+              style={{ background: viewMode === v ? c.primary : "transparent", color: viewMode === v ? "#fff" : c.muted, fontWeight: 600 }}>
+              {label}
+            </button>
+          ))}
         </div>
-      )}
-      {todaySessions.length === 0 && (
-        <div className="flex items-center gap-3 p-4 rounded-2xl mb-5" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
-          <span style={{ fontSize: 28 }}>🌿</span>
-          <div>
-            <div className="text-sm font-medium">No sessions today</div>
-            <div className="text-xs" style={{ color: c.muted }}>Next up: {upcomingSessions.length > 0 ? formatDayHeader(upcomingSessions[0].date) : "nothing scheduled yet"}</div>
-          </div>
-        </div>
-      )}
-
-      {/* Toggle */}
-      <div className="flex gap-2 mb-3">
-        {[{ v: false, label: `Upcoming (${upcomingSessions.length})` }, { v: true, label: `Past (${pastSessions.length})` }].map(({ v, label }) => (
-          <button key={String(v)} onClick={() => setShowPast(v)} className="px-3 py-1.5 rounded-xl text-sm"
-            style={{ background: showPast === v ? c.primary : c.surface, color: showPast === v ? "#fff" : c.muted, fontWeight: 600, border: `1px solid ${c.line}` }}>
-            {label}
-          </button>
-        ))}
+        <button onClick={onAddSession}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm active:scale-95"
+          style={{ background: c.primary, color: "#fff", fontWeight: 700, boxShadow: `0 2px 8px ${c.primary}44` }}>
+          <CalendarPlus size={15} /> New session
+        </button>
       </div>
 
-      {/* Session groups */}
-      {(!showPast ? groupByDate(upcomingSessions) : groupByDate(pastSessions)).map(([date, sessions]) => (
-        <div key={date} className="mb-4">
-          <SectionLabel>{formatDayHeader(date)}</SectionLabel>
-          {sessions.map((s) => <SessionCard key={s.id} session={s} client={clientFor(s)} onStart={() => onStartSession(clientFor(s))} onViewClient={() => onViewClient(clientFor(s))} />)}
-        </div>
-      ))}
+      {/* Week view */}
+      {viewMode === "week" && (
+        <WeekCalendarView sessions={schedule} clients={CLIENTS} onStartSession={onStartSession} onViewClient={onViewClient} />
+      )}
 
-      {!showPast && upcomingSessions.length === 0 && <EmptyState icon={Calendar} message="No upcoming sessions scheduled." />}
-      {showPast  && pastSessions.length    === 0 && <EmptyState icon={Calendar} message="No past sessions to show." />}
+      {/* List view */}
+      {viewMode === "list" && (
+        <>
+          {/* Today */}
+          {todaySessions.length > 0 && (
+            <div className="mb-5">
+              <SectionLabel>Today</SectionLabel>
+              {todaySessions.map((s) => <SessionCard key={s.id} session={s} client={clientFor(s)} onStart={() => onStartSession(clientFor(s))} onViewClient={() => onViewClient(clientFor(s))} />)}
+            </div>
+          )}
+          {todaySessions.length === 0 && (
+            <div className="flex items-center gap-3 p-4 rounded-2xl mb-5" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
+              <span style={{ fontSize: 28 }}>🌿</span>
+              <div>
+                <div className="text-sm font-medium">No sessions today</div>
+                <div className="text-xs" style={{ color: c.muted }}>Next up: {upcomingSessions.length > 0 ? formatDayHeader(upcomingSessions[0].date) : "nothing scheduled yet"}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Toggle */}
+          <div className="flex gap-2 mb-3">
+            {[{ v: false, label: `Upcoming (${upcomingSessions.length})` }, { v: true, label: `Past (${pastSessions.length})` }].map(({ v, label }) => (
+              <button key={String(v)} onClick={() => setShowPast(v)} className="px-3 py-1.5 rounded-xl text-sm"
+                style={{ background: showPast === v ? c.primary : c.surface, color: showPast === v ? "#fff" : c.muted, fontWeight: 600, border: `1px solid ${c.line}` }}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Session groups */}
+          {(!showPast ? groupByDate(upcomingSessions) : groupByDate(pastSessions)).map(([date, sessions]) => (
+            <div key={date} className="mb-4">
+              <SectionLabel>{formatDayHeader(date)}</SectionLabel>
+              {sessions.map((s) => <SessionCard key={s.id} session={s} client={clientFor(s)} onStart={() => onStartSession(clientFor(s))} onViewClient={() => onViewClient(clientFor(s))} />)}
+            </div>
+          ))}
+
+          {!showPast && upcomingSessions.length === 0 && <EmptyState icon={Calendar} message="No upcoming sessions scheduled." />}
+          {showPast  && pastSessions.length    === 0 && <EmptyState icon={Calendar} message="No past sessions to show." />}
+        </>
+      )}
     </div>
   );
 }
@@ -645,23 +800,30 @@ function SessionCard({ session, client, onStart, onViewClient }) {
 }
 
 // ---------------- Clients Screen (roster) ----------------
-function ClientsScreen({ onOpen }) {
+function ClientsScreen({ clients, onOpen, onAddClient }) {
   const [resetFlash, setResetFlash] = useState(false);
+  const allClients = clients ?? CLIENTS;
   const handleReset = () => { clearAllSessions(); setResetFlash(true); setTimeout(() => setResetFlash(false), 1800); };
   return (
     <div className="pb-28">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <div className="font-display text-2xl" style={{ fontWeight: 800 }}>My clients</div>
-          <div className="text-xs mt-0.5" style={{ color: c.muted }}>Tap a client to open their hub</div>
+          <div className="font-display text-2xl" style={{ fontWeight: 800 }}>Clients</div>
+          <div className="text-xs mt-0.5" style={{ color: c.muted }}>{allClients.length} active · tap to open hub</div>
         </div>
-        <button onClick={handleReset} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs"
-          style={{ background: resetFlash ? c.primarySoft : c.bg, color: resetFlash ? c.primary : c.muted, fontWeight: 600, border: `1px solid ${c.line}` }}>
-          <RotateCcw size={12} />{resetFlash ? "Reset!" : "Reset demo"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleReset} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs"
+            style={{ background: resetFlash ? c.primarySoft : c.bg, color: resetFlash ? c.primary : c.muted, fontWeight: 600, border: `1px solid ${c.line}` }}>
+            <RotateCcw size={12} />{resetFlash ? "Reset!" : "Reset demo"}
+          </button>
+          <button onClick={onAddClient} className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs active:scale-95"
+            style={{ background: c.primary, color: "#fff", fontWeight: 700 }}>
+            <Plus size={13} /> Add
+          </button>
+        </div>
       </div>
       <div className="grid gap-3">
-        {CLIENTS.map((cl) => (
+        {allClients.map((cl) => (
           <button key={cl.id} onClick={() => onOpen(cl)} className="flex items-center gap-3 p-4 rounded-2xl text-left transition-transform active:scale-[0.99]"
             style={{ background: c.surface, border: `1px solid ${c.line}`, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
             <div className="grid place-items-center rounded-2xl font-display text-lg" style={{ width: 48, height: 48, background: cl.color, color: "#fff", fontWeight: 800 }}>
@@ -669,7 +831,7 @@ function ClientsScreen({ onOpen }) {
             </div>
             <div className="flex-1">
               <div className="font-display text-base" style={{ fontWeight: 700 }}>{cl.name}</div>
-              <div className="text-xs mt-0.5" style={{ color: c.muted }}>Age {cl.age} · {cl.programs} programs · {cl.behaviors} behaviors · last {cl.last}</div>
+              <div className="text-xs mt-0.5" style={{ color: c.muted }}>Age {cl.age} · {cl.programs ?? 0} programs · {cl.behaviors ?? 0} behaviors · last {cl.last ?? "—"}</div>
             </div>
             <ChevronRight size={18} style={{ color: c.muted }} />
           </button>
@@ -977,6 +1139,7 @@ function ClientHub({ client, onBack, onStart }) {
   const tabs = [
     { k: "session",   label: "Session",   icon: Activity },
     { k: "history",   label: "History",   icon: TrendingUp },
+    { k: "notes",     label: "Notes",     icon: FileSignature },
     { k: "docs",      label: "Documents", icon: FileText },
     { k: "protocols", label: "Protocols", icon: BookOpen },
     { k: "preauth",   label: "Pre-auth",  icon: Shield },
@@ -1008,6 +1171,7 @@ function ClientHub({ client, onBack, onStart }) {
         )}
         {tab === "history" && (
           <div className="grid gap-2.5">
+            <ProgressChart client={client} />
             {!(PAST_SESSIONS[client.id]?.length) ? <EmptyState icon={TrendingUp} message="No past sessions yet." /> :
               PAST_SESSIONS[client.id].map((s, i) => (
                 <Card key={i}>
@@ -1045,6 +1209,7 @@ function ClientHub({ client, onBack, onStart }) {
               ))}
           </div>
         )}
+        {tab === "notes"   && <NoteHistoryTab client={client} />}
         {tab === "preauth" && <PreAuthTab client={client} />}
       </div>
     </div>
@@ -1135,7 +1300,15 @@ function LiveSession({ client, onExit }) {
   const addAbc  = (ev)        => setAbc((a) => [{ ...ev, time: now() }, ...a]);
   const addNote = (text)      => setNotes((n) => [...n, { text, time: now() }]);
   const handleExit = () => { clearSession(client.id); onExit(); };
-  const handleDone = () => { clearSession(client.id); onExit(); };
+  const handleDone = (noteText) => {
+    const today = new Date().toISOString().split("T")[0];
+    const skillAvg = (() => { const u = programs.filter((p) => p.trials.length); return u.length ? Math.round(u.reduce((s, p) => s + p.trials.filter((t) => t === "+").length / p.trials.length, 0) / u.length * 100) : null; })();
+    const behTotal = behaviors.reduce((s, b) => s + b.count, 0);
+    const dur = `${String(Math.floor(secs/60)).padStart(2,"0")}:${String(secs%60).padStart(2,"0")}`;
+    saveNoteRecord(client.id, { date: today, duration: dur, note: noteText ?? "", skillPct: skillAvg, behaviors: behTotal });
+    clearSession(client.id);
+    onExit();
+  };
 
   const applyVoiceEntry = ({ trials, behaviors: bds, abcs, note }) => {
     if (trials?.length) setPrograms((ps) => ps.map((p) => { const t = trials.find((t) => t.programId === p.id); return t ? { ...p, trials: [...p.trials, ...t.marks] } : p; }));
@@ -1652,7 +1825,7 @@ function EndSessionModal({ client, duration, programs, behaviors, abc, notes, on
             <div className="flex items-center gap-2 mt-4 mb-1"><FileSignature size={15} style={{ color: c.primary }} /><span className="text-sm" style={{ fontWeight: 600 }}>Session note — edit before signing</span></div>
             <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={10} className="w-full p-3 rounded-xl text-sm outline-none leading-relaxed" style={{ background: c.bg, border: `1px solid ${c.line}`, whiteSpace: "pre-wrap" }} />
             <ParentSummarySection client={client} programs={programs} behaviors={behaviors} duration={duration} />
-            <button onClick={onDone} className="w-full mt-4 flex items-center justify-center gap-2 py-3 rounded-xl text-base" style={{ background: c.plus, color: "#fff", fontWeight: 700 }}>
+            <button onClick={() => onDone(note)} className="w-full mt-4 flex items-center justify-center gap-2 py-3 rounded-xl text-base" style={{ background: c.plus, color: "#fff", fontWeight: 700 }}>
               <Check size={18} /> Sign & close session
             </button>
           </>
@@ -1743,4 +1916,685 @@ function Recap({ label, value }) {
 }
 function EmptyState({ icon: Icon, message }) {
   return <div className="flex flex-col items-center text-center py-10 gap-3" style={{ color: c.muted }}><Icon size={32} style={{ opacity: 0.3 }} /><p className="text-sm">{message}</p></div>;
+}
+// ---- Staff Screen ----------------
+function StaffScreen({ onOpenClient }) {
+  const [selected, setSelected] = useState(null);
+  const bcbas = Object.entries(TEAM_MEMBERS).filter(([, m]) => m.role === "BCBA");
+  const rbts   = Object.entries(TEAM_MEMBERS).filter(([, m]) => m.role === "RBT");
+  const others = Object.entries(TEAM_MEMBERS).filter(([, m]) => !["BCBA","RBT"].includes(m.role));
+
+  if (selected) {
+    return <StaffDetail name={selected} onBack={() => setSelected(null)} onOpenClient={onOpenClient} />;
+  }
+
+  const StaffGroup = ({ title, members }) => (
+    <div className="mb-5">
+      <SectionLabel>{title}</SectionLabel>
+      <div className="grid gap-2.5">
+        {members.map(([name, member]) => {
+          const det   = STAFF_DETAILS[name] ?? { clients: [], hoursWeek: 0 };
+          const days  = det.certExp ? certDaysLeft(det.certExp) : null;
+          const warn  = days !== null && days < 90;
+          const roleC = ROLE_COLOR[member.role] ?? c.muted;
+          const roleBg= ROLE_BG[member.role]   ?? c.bg;
+          return (
+            <button key={name} onClick={() => setSelected(name)}
+              className="flex items-center gap-3 p-4 rounded-2xl text-left transition-transform active:scale-[0.99]"
+              style={{ background: c.surface, border: `1px solid ${warn ? c.accent + "55" : c.line}`, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+              <div className="grid place-items-center rounded-full font-display shrink-0"
+                style={{ width: 48, height: 48, background: member.color, color: "#fff", fontWeight: 800, fontSize: 15 }}>
+                {member.initials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-base" style={{ fontWeight: 700 }}>{name}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: roleBg, color: roleC, fontWeight: 700 }}>{member.role}</span>
+                  {warn && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: c.accentSoft, color: c.accent, fontWeight: 700 }}>Cert {days}d</span>}
+                </div>
+                <div className="text-xs mt-0.5" style={{ color: c.muted }}>
+                  {det.clients.length} client{det.clients.length !== 1 ? "s" : ""} · {det.hoursWeek}h this week
+                  {det.supervisionHours ? ` · ${det.supervisionHours}h supervision` : ""}
+                </div>
+              </div>
+              <ChevronRight size={18} style={{ color: c.muted }} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="pb-28">
+      <div className="mb-5">
+        <div className="font-display text-2xl" style={{ fontWeight: 800 }}>Team</div>
+        <div className="text-xs mt-0.5" style={{ color: c.muted }}>Cayer Behavioral Group · {Object.keys(TEAM_MEMBERS).length} members</div>
+      </div>
+
+      {/* Summary bar */}
+      <div className="grid grid-cols-3 gap-2 mb-5">
+        {[
+          { label: "BCBAs", value: bcbas.length },
+          { label: "RBTs", value: rbts.length },
+          { label: "Total hrs/wk", value: Object.values(STAFF_DETAILS).reduce((s, d) => s + (d.hoursWeek || 0), 0) },
+        ].map(({ label, value }) => (
+          <div key={label} className="p-3 rounded-2xl text-center" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
+            <div className="font-display text-xl" style={{ fontWeight: 800 }}>{value}</div>
+            <div className="text-xs" style={{ color: c.muted }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      <StaffGroup title="BCBAs" members={bcbas} />
+      <StaffGroup title="RBTs" members={rbts} />
+      <StaffGroup title="Other specialists" members={others} />
+    </div>
+  );
+}
+
+// ---- Staff Detail ----
+function StaffDetail({ name, onBack, onOpenClient }) {
+  const member = TEAM_MEMBERS[name] ?? { color: c.muted, initials: name[0], role: "" };
+  const det    = STAFF_DETAILS[name] ?? { clients: [], hoursWeek: 0, certExp: null };
+  const clientList = CLIENTS.filter((cl) => det.clients.includes(cl.id));
+  const roleC  = ROLE_COLOR[member.role] ?? c.muted;
+  const roleBg = ROLE_BG[member.role]   ?? c.bg;
+  const days   = det.certExp ? certDaysLeft(det.certExp) : null;
+  const thisWeekSessions = SCHEDULE.filter((s) => det.clients.includes(s.clientId) && s.status === "upcoming").slice(0, 5);
+
+  return (
+    <div className="pb-28">
+      <BackBar onBack={onBack} label="Team" />
+
+      {/* Profile */}
+      <div className="flex items-center gap-4 mt-4 mb-5">
+        <div className="grid place-items-center rounded-full font-display"
+          style={{ width: 64, height: 64, background: member.color, color: "#fff", fontWeight: 800, fontSize: 20 }}>
+          {member.initials}
+        </div>
+        <div>
+          <div className="font-display text-2xl" style={{ fontWeight: 800 }}>{name}</div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: roleBg, color: roleC, fontWeight: 700 }}>{member.role}</span>
+            {days !== null && (
+              <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: days < 90 ? c.accentSoft : c.primarySoft, color: days < 90 ? c.accent : c.primary, fontWeight: 700 }}>
+                Cert expires {days}d
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        {[
+          { label: "Hrs / wk", value: det.hoursWeek },
+          { label: "Clients", value: det.clients.length },
+          { label: "Supervision hrs", value: det.supervisionHours ?? "N/A" },
+        ].map(({ label, value }) => (
+          <div key={label} className="p-3 rounded-2xl text-center" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
+            <div className="font-display text-xl" style={{ fontWeight: 800 }}>{value}</div>
+            <div className="text-xs" style={{ color: c.muted }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Assigned clients */}
+      <Card>
+        <Label icon={Users}>Assigned clients</Label>
+        {clientList.length === 0
+          ? <p className="text-sm mt-3" style={{ color: c.muted }}>No clients assigned.</p>
+          : <div className="grid gap-2 mt-3">
+              {clientList.map((cl) => (
+                <button key={cl.id} onClick={() => onOpenClient(cl, "staff")}
+                  className="flex items-center gap-3 p-3 rounded-xl text-left active:opacity-70"
+                  style={{ background: c.bg, border: `1px solid ${c.line}` }}>
+                  <div className="grid place-items-center rounded-xl font-display shrink-0"
+                    style={{ width: 36, height: 36, background: cl.color, color: "#fff", fontWeight: 800, fontSize: 13 }}>
+                    {cl.name.split(" ").map((w) => w[0]).join("")}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm" style={{ fontWeight: 600 }}>{cl.name}</div>
+                    <div className="text-xs" style={{ color: c.muted }}>Age {cl.age} · {cl.programs} programs</div>
+                  </div>
+                  <ChevronRight size={15} style={{ color: c.muted }} />
+                </button>
+              ))}
+            </div>}
+      </Card>
+
+      {/* Upcoming sessions */}
+      {thisWeekSessions.length > 0 && (
+        <div className="mt-4">
+          <Card>
+            <Label icon={Calendar}>Upcoming sessions</Label>
+            <div className="grid gap-2 mt-3">
+              {thisWeekSessions.map((s) => {
+                const cl = CLIENTS.find((c) => c.id === s.clientId);
+                return (
+                  <div key={s.id} className="flex items-center gap-3 p-2.5 rounded-xl" style={{ background: c.bg }}>
+                    <div className="grid place-items-center rounded-lg font-display shrink-0"
+                      style={{ width: 32, height: 32, background: cl?.color ?? c.muted, color: "#fff", fontWeight: 800, fontSize: 11 }}>
+                      {cl?.name.split(" ").map((w) => w[0]).join("")}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm" style={{ fontWeight: 600 }}>{cl?.name}</div>
+                      <div className="text-xs" style={{ color: c.muted }}>{formatDayHeader(s.date)} · {s.startTime}–{s.endTime}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Add Session Modal ----
+function AddSessionModal({ onClose, onAdd }) {
+  const today = new Date().toISOString().split("T")[0];
+  const [clientId, setClientId]   = useState(CLIENTS[0]?.id ?? "");
+  const [date, setDate]           = useState(today);
+  const [startTime, setStartTime] = useState("9:00 AM");
+  const [endTime, setEndTime]     = useState("11:00 AM");
+  const [therapist, setTherapist] = useState("Tucker");
+  const [address, setAddress]     = useState("");
+  const [supervised, setSupervised] = useState(false);
+  const [supervisor, setSupervisor] = useState("Dr. Martinez");
+
+  const timeOptions = [
+    "8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM",
+    "12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM",
+    "4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM",
+  ];
+
+  const rbts   = Object.entries(TEAM_MEMBERS).filter(([, m]) => m.role === "RBT").map(([n]) => n);
+  const bcbas  = Object.entries(TEAM_MEMBERS).filter(([, m]) => m.role === "BCBA").map(([n]) => n);
+
+  // Auto-fill address from client's existing sessions
+  const handleClientChange = (id) => {
+    setClientId(id);
+    const prev = SCHEDULE.find((s) => s.clientId === id && s.address);
+    if (prev) setAddress(prev.address);
+  };
+
+  const save = () => {
+    if (!clientId || !date || !address.trim()) return;
+    onAdd({
+      id: `s${Date.now()}`,
+      clientId,
+      date,
+      startTime,
+      endTime,
+      address: address.trim(),
+      status: "upcoming",
+      ...(supervised ? { supervisor } : {}),
+    });
+    onClose();
+  };
+
+  const selStyle = { background: c.bg, border: `1px solid ${c.line}`, borderRadius: 12, padding: "10px 12px", fontSize: 14, outline: "none", width: "100%", color: c.ink };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3" style={{ background: "rgba(26,46,43,0.55)" }}>
+      <div className="w-full max-w-md rounded-2xl p-5 max-h-[92vh] overflow-y-auto" style={{ background: c.surface }}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="font-display text-xl" style={{ fontWeight: 800 }}>New session</div>
+          <button onClick={onClose} className="grid place-items-center rounded-lg" style={{ width: 32, height: 32, background: c.bg }}><X size={18} /></button>
+        </div>
+
+        <div className="grid gap-3">
+          {/* Client */}
+          <div>
+            <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>Client</div>
+            <select value={clientId} onChange={(e) => handleClientChange(e.target.value)} style={selStyle}>
+              {CLIENTS.map((cl) => <option key={cl.id} value={cl.id}>{cl.name} (age {cl.age})</option>)}
+            </select>
+          </div>
+
+          {/* Date */}
+          <div>
+            <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>Date</div>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              style={{ ...selStyle }} />
+          </div>
+
+          {/* Times */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>Start time</div>
+              <select value={startTime} onChange={(e) => setStartTime(e.target.value)} style={selStyle}>
+                {timeOptions.map((t) => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>End time</div>
+              <select value={endTime} onChange={(e) => setEndTime(e.target.value)} style={selStyle}>
+                {timeOptions.map((t) => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Therapist */}
+          <div>
+            <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>Assigned therapist</div>
+            <select value={therapist} onChange={(e) => setTherapist(e.target.value)} style={selStyle}>
+              {rbts.map((n) => <option key={n}>{n}</option>)}
+            </select>
+          </div>
+
+          {/* Address */}
+          <div>
+            <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>Address</div>
+            <input value={address} onChange={(e) => setAddress(e.target.value)}
+              placeholder="Session location" style={selStyle} />
+          </div>
+
+          {/* Supervision toggle */}
+          <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: c.bg, border: `1px solid ${c.line}` }}>
+            <div>
+              <div className="text-sm" style={{ fontWeight: 600 }}>BCBA supervision</div>
+              <div className="text-xs" style={{ color: c.muted }}>Mark as a supervised session</div>
+            </div>
+            <button onClick={() => setSupervised(!supervised)}
+              className="w-11 h-6 rounded-full relative transition-colors"
+              style={{ background: supervised ? c.primary : c.line }}>
+              <span className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"
+                style={{ left: supervised ? "calc(100% - 20px)" : 4 }} />
+            </button>
+          </div>
+
+          {supervised && (
+            <div>
+              <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>Supervising BCBA</div>
+              <select value={supervisor} onChange={(e) => setSupervisor(e.target.value)} style={selStyle}>
+                {bcbas.map((n) => <option key={n}>{n}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl text-sm" style={{ background: c.bg, color: c.muted, fontWeight: 600 }}>Cancel</button>
+          <button onClick={save} disabled={!address.trim()} className="flex-1 py-3 rounded-xl text-sm active:scale-95"
+            style={{ background: address.trim() ? c.primary : c.line, color: "#fff", fontWeight: 700 }}>
+            Add session
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Week Calendar View ----
+function WeekCalendarView({ sessions, clients, onStartSession, onViewClient }) {
+  const today = new Date().toISOString().split("T")[0];
+  const [weekStart, setWeekStart] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1));
+    return d.toISOString().split("T")[0];
+  });
+
+  const days = getWeekDays(weekStart);
+  const dayLabels = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+  const prevWeek = () => {
+    const d = new Date(weekStart + "T12:00:00"); d.setDate(d.getDate() - 7);
+    setWeekStart(d.toISOString().split("T")[0]);
+  };
+  const nextWeek = () => {
+    const d = new Date(weekStart + "T12:00:00"); d.setDate(d.getDate() + 7);
+    setWeekStart(d.toISOString().split("T")[0]);
+  };
+
+  const mon = new Date(weekStart + "T12:00:00");
+  const sun = new Date(days[6] + "T12:00:00");
+  const monthLabel = mon.getMonth() === sun.getMonth()
+    ? `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][mon.getMonth()]} ${mon.getFullYear()}`
+    : `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][mon.getMonth()]} – ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][sun.getMonth()]} ${sun.getFullYear()}`;
+
+  return (
+    <div className="mb-5">
+      {/* Week nav */}
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={prevWeek} className="grid place-items-center rounded-xl" style={{ width: 34, height: 34, background: c.surface, border: `1px solid ${c.line}` }}>
+          <ChevronRight size={16} style={{ color: c.muted, transform: "rotate(180deg)" }} />
+        </button>
+        <span className="text-sm" style={{ fontWeight: 700 }}>{monthLabel}</span>
+        <button onClick={nextWeek} className="grid place-items-center rounded-xl" style={{ width: 34, height: 34, background: c.surface, border: `1px solid ${c.line}` }}>
+          <ChevronRight size={16} style={{ color: c.muted }} />
+        </button>
+      </div>
+
+      {/* Day columns */}
+      <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(7, 1fr)` }}>
+        {days.map((day, i) => {
+          const isToday = day === today;
+          const daySessions = sessions.filter((s) => s.date === day);
+          return (
+            <div key={day} className="flex flex-col gap-1">
+              <div className="text-center pb-1.5" style={{ borderBottom: `2px solid ${isToday ? c.primary : c.line}` }}>
+                <div className="text-xs" style={{ color: isToday ? c.primary : c.muted, fontWeight: isToday ? 700 : 500 }}>{dayLabels[i]}</div>
+                <div className="font-display text-base leading-tight" style={{ fontWeight: 800, color: isToday ? c.primary : c.ink }}>
+                  {new Date(day + "T12:00:00").getDate()}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                {daySessions.map((s) => {
+                  const cl = clients.find((c) => c.id === s.clientId);
+                  return (
+                    <button key={s.id} onClick={() => cl && onViewClient(cl)}
+                      className="w-full rounded-lg p-1 text-left active:opacity-70"
+                      style={{ background: cl?.color + "22" ?? c.primarySoft, border: `1.5px solid ${cl?.color ?? c.primary}` }}>
+                      <div className="text-xs font-display leading-tight truncate" style={{ fontWeight: 700, color: cl?.color ?? c.primary, fontSize: 9 }}>
+                        {cl?.name.split(" ")[0]}
+                      </div>
+                      <div className="text-xs leading-tight" style={{ color: c.muted, fontSize: 8 }}>{s.startTime.replace(" AM","").replace(" PM","")}</div>
+                    </button>
+                  );
+                })}
+                {daySessions.length === 0 && (
+                  <div className="rounded-lg" style={{ height: 28, background: c.bg }} />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Today's session count */}
+      <div className="mt-2 text-center text-xs" style={{ color: c.muted }}>
+        {sessions.filter((s) => s.date === today).length} session{sessions.filter((s) => s.date === today).length !== 1 ? "s" : ""} today
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// NEW COMPONENTS: Auth, Note History, Progress Chart, Add Client
+// ============================================================
+
+// ---------------- Login Screen ----------------
+function LoginScreen({ onLogin }) {
+  const [selected, setSelected] = useState(null);
+  const [pin, setPin]           = useState("");
+  const [error, setError]       = useState("");
+
+  const members = Object.entries(TEAM_MEMBERS).map(([name, m]) => ({ name, ...m }));
+
+  const handlePin = (digit) => {
+    if (pin.length >= 4) return;
+    const next = pin + digit;
+    setPin(next);
+    setError("");
+    if (next.length === 4) {
+      if (PINS[selected.name] === next) {
+        onLogin({ name: selected.name, role: selected.role, initials: selected.initials, color: selected.color });
+      } else {
+        setTimeout(() => { setPin(""); setError("Wrong PIN — try again"); }, 400);
+      }
+    }
+  };
+
+  const selStyle = { background: c.surface, border: `2px solid ${c.primary}`, transform: "scale(1.04)", boxShadow: `0 0 0 4px ${c.primarySoft}` };
+  const norStyle = { background: c.surface, border: `1px solid ${c.line}` };
+
+  if (!selected) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 pb-10">
+        <div className="font-display text-3xl mb-1 text-center" style={{ fontWeight: 800, color: c.ink }}>Behavior Hub</div>
+        <div className="text-sm mb-8 text-center" style={{ color: c.muted }}>Cayer Behavioral Group · select your profile</div>
+        <div className="grid grid-cols-3 gap-3 w-full max-w-sm">
+          {members.map((m) => {
+            const roleC  = ROLE_COLOR[m.role]  ?? c.muted;
+            const roleBg = ROLE_BG[m.role]     ?? c.bg;
+            return (
+              <button key={m.name} onClick={() => setSelected(m)}
+                className="flex flex-col items-center gap-2 p-3 rounded-2xl transition-all active:scale-95"
+                style={{ background: c.surface, border: `1px solid ${c.line}` }}>
+                <div className="grid place-items-center rounded-full font-display"
+                  style={{ width: 52, height: 52, background: m.color, color: "#fff", fontWeight: 800, fontSize: 16 }}>
+                  {m.initials}
+                </div>
+                <div className="text-xs text-center leading-tight" style={{ fontWeight: 700 }}>{m.name.split(" ")[0]}</div>
+                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: roleBg, color: roleC, fontWeight: 700 }}>{m.role}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 pb-10">
+      <div className="grid place-items-center rounded-full font-display mb-3"
+        style={{ width: 72, height: 72, background: selected.color, color: "#fff", fontWeight: 800, fontSize: 22 }}>
+        {selected.initials}
+      </div>
+      <div className="font-display text-xl mb-0.5" style={{ fontWeight: 800 }}>{selected.name}</div>
+      <div className="text-sm mb-6" style={{ color: c.muted }}>Enter your 4-digit PIN</div>
+
+      {/* PIN dots */}
+      <div className="flex gap-3 mb-2">
+        {[0,1,2,3].map((i) => (
+          <div key={i} className="w-4 h-4 rounded-full transition-all"
+            style={{ background: pin.length > i ? c.primary : c.line, transform: pin.length > i ? "scale(1.3)" : "scale(1)" }} />
+        ))}
+      </div>
+      {error && <div className="text-xs mb-4" style={{ color: c.accent }}>{error}</div>}
+      {!error && <div className="mb-4" style={{ height: 18 }} />}
+
+      {/* Numpad */}
+      <div className="grid grid-cols-3 gap-3 w-56">
+        {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((d, i) => (
+          d === "" ? <div key={i} /> :
+          <button key={i} onClick={() => d === "⌫" ? setPin(p => p.slice(0,-1)) : handlePin(String(d))}
+            className="h-14 rounded-2xl font-display text-xl active:scale-95 transition-transform"
+            style={{ background: c.surface, border: `1px solid ${c.line}`, fontWeight: 700, color: c.ink }}>
+            {d}
+          </button>
+        ))}
+      </div>
+
+      <button onClick={() => { setSelected(null); setPin(""); setError(""); }}
+        className="mt-6 text-sm" style={{ color: c.muted }}>← Back</button>
+
+      <div className="mt-8 p-3 rounded-xl text-xs text-center" style={{ background: c.primarySoft, color: c.muted, maxWidth: 240 }}>
+        Demo PINs: RBTs use <b style={{color:c.primary}}>1234–4567</b> · BCBAs use <b style={{color:c.purple}}>0000 / 9999</b>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- Note History Tab ----------------
+function NoteHistoryTab({ client }) {
+  const [records, setRecords] = useState([]);
+  const [expanded, setExpanded] = useState(null);
+
+  useEffect(() => {
+    const saved = loadNoteRecords(client.id);
+    const seeded = (PAST_SESSIONS[client.id] ?? []).map((s) => ({
+      date: s.date ?? "2026-06-" + (s.date ?? "12"),
+      duration: s.duration,
+      skillPct: s.skillPct,
+      behaviors: s.behaviors,
+      note: s.signed ? "Session note signed and archived." : "Note pending signature.",
+      saved: null,
+    }));
+    const merged = [...saved, ...seeded.filter((s) => !saved.find((r) => r.date === s.date))];
+    setRecords(merged.sort((a,b) => (b.date ?? "").localeCompare(a.date ?? "")));
+  }, [client.id]);
+
+  if (records.length === 0) return <EmptyState icon={FileSignature} message="No signed notes yet. Complete a session to generate one." />;
+
+  return (
+    <div className="grid gap-2.5">
+      {records.map((r, i) => (
+        <div key={i} className="rounded-2xl overflow-hidden" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
+          <button onClick={() => setExpanded(expanded === i ? null : i)}
+            className="w-full flex items-center gap-3 p-4 text-left">
+            <div className="grid place-items-center rounded-xl shrink-0"
+              style={{ width: 44, height: 44, background: c.primarySoft }}>
+              <FileSignature size={18} style={{ color: c.primary }} />
+            </div>
+            <div className="flex-1">
+              <div className="font-display text-base" style={{ fontWeight: 700 }}>
+                {r.date ? new Date(r.date + "T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : "Session note"}
+              </div>
+              <div className="text-xs mt-0.5" style={{ color: c.muted }}>
+                {r.duration} · {r.skillPct !== null && r.skillPct !== undefined ? `${r.skillPct}% skill avg` : ""} · {r.behaviors} behavior events
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: c.primarySoft, color: c.primary, fontWeight: 700 }}>✓ Signed</span>
+              <ChevronDown size={16} style={{ color: c.muted, transform: expanded === i ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .15s" }} />
+            </div>
+          </button>
+          {expanded === i && r.note && (
+            <div className="px-4 pb-4" style={{ borderTop: `1px solid ${c.line}` }}>
+              <p className="text-sm leading-relaxed mt-3 whitespace-pre-wrap">{r.note}</p>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------- Progress Chart (SVG) ----------------
+function ProgressChart({ client }) {
+  const sessions = PAST_SESSIONS[client.id] ?? [];
+  if (sessions.length < 2) return <EmptyState icon={TrendingUp} message="Need at least 2 sessions to show a trend." />;
+
+  const W = 300, H = 120, PAD = { t: 12, r: 12, b: 30, l: 36 };
+  const innerW = W - PAD.l - PAD.r;
+  const innerH = H - PAD.t - PAD.b;
+  const pts = sessions.map((s, i) => ({ x: PAD.l + (i / (sessions.length - 1)) * innerW, y: PAD.t + ((100 - s.skillPct) / 100) * innerH, pct: s.skillPct, date: s.date }));
+  const polyline = pts.map((p) => `${p.x},${p.y}`).join(" ");
+  const latest = pts[pts.length - 1];
+  const trend  = latest.pct - pts[0].pct;
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between mb-2">
+        <Label icon={TrendingUp}>Skill accuracy trend</Label>
+        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: trend >= 0 ? c.primarySoft : c.accentSoft, color: trend >= 0 ? c.primary : c.accent, fontWeight: 700 }}>
+          {trend >= 0 ? "+" : ""}{trend}% overall
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", overflow: "visible" }}>
+        {/* Y gridlines */}
+        {[0, 50, 80, 100].map((v) => {
+          const y = PAD.t + ((100 - v) / 100) * innerH;
+          return (
+            <g key={v}>
+              <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y} stroke={v === 80 ? c.primary + "44" : c.line} strokeWidth={v === 80 ? 1.5 : 1} strokeDasharray={v === 80 ? "4 3" : ""} />
+              <text x={PAD.l - 4} y={y + 4} textAnchor="end" fontSize={9} fill={c.muted}>{v}%</text>
+            </g>
+          );
+        })}
+        {/* Area fill */}
+        <defs>
+          <linearGradient id="skillGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={c.primary} stopOpacity="0.18" />
+            <stop offset="100%" stopColor={c.primary} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polygon points={`${pts[0].x},${PAD.t + innerH} ${polyline} ${pts[pts.length-1].x},${PAD.t + innerH}`} fill="url(#skillGrad)" />
+        {/* Line */}
+        <polyline points={polyline} fill="none" stroke={c.primary} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+        {/* Dots + labels */}
+        {pts.map((p, i) => (
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r={4} fill={c.surface} stroke={pctColor(p.pct)} strokeWidth={2.5} />
+            <text x={p.x} y={H - 8} textAnchor="middle" fontSize={8} fill={c.muted}>{p.date?.slice(5) ?? sessions[i].date}</text>
+          </g>
+        ))}
+        {/* Latest value callout */}
+        <rect x={latest.x - 16} y={latest.y - 20} width={32} height={16} rx={5} fill={pctColor(latest.pct)} />
+        <text x={latest.x} y={latest.y - 8} textAnchor="middle" fontSize={9} fill="#fff" fontWeight="bold">{latest.pct}%</text>
+      </svg>
+    </Card>
+  );
+}
+
+// ---------------- Add Client Modal ----------------
+const CLIENT_COLORS = ["#0E9F8F","#F97316","#F59E0B","#7C3AED","#EC4899","#14B8A6","#EF4444","#84CC16","#8B5CF6"];
+
+function AddClientModal({ onClose, onAdd }) {
+  const [name, setName]     = useState("");
+  const [age, setAge]       = useState("");
+  const [diag, setDiag]     = useState("Autism Spectrum Disorder (F84.0)");
+  const [color, setColor]   = useState(CLIENT_COLORS[0]);
+  const [address, setAddress] = useState("");
+
+  const save = () => {
+    if (!name.trim() || !age) return;
+    onAdd({
+      id: `cx${Date.now()}`,
+      name: name.trim(),
+      age: parseInt(age),
+      color,
+      programs: 0,
+      behaviors: 0,
+      last: "Never",
+      diagnosis: diag.trim(),
+      address: address.trim(),
+    });
+    onClose();
+  };
+
+  const inp = { background: c.bg, border: `1px solid ${c.line}`, borderRadius: 12, padding: "10px 12px", fontSize: 14, outline: "none", width: "100%", color: c.ink };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3" style={{ background: "rgba(26,46,43,0.55)" }}>
+      <div className="w-full max-w-md rounded-2xl p-5" style={{ background: c.surface }}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="font-display text-xl" style={{ fontWeight: 800 }}>New client</div>
+          <button onClick={onClose} className="grid place-items-center rounded-lg" style={{ width: 32, height: 32, background: c.bg }}><X size={18} /></button>
+        </div>
+        <div className="grid gap-3">
+          <div>
+            <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>Full name</div>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Jordan M." style={inp} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>Age</div>
+              <input type="number" min="1" max="25" value={age} onChange={(e) => setAge(e.target.value)} placeholder="6" style={inp} />
+            </div>
+            <div>
+              <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>Color</div>
+              <div className="flex gap-1.5 flex-wrap pt-1">
+                {CLIENT_COLORS.map((col) => (
+                  <button key={col} onClick={() => setColor(col)}
+                    className="rounded-full transition-transform active:scale-90"
+                    style={{ width: 24, height: 24, background: col, border: `3px solid ${color === col ? c.ink : "transparent"}`, transform: color === col ? "scale(1.15)" : "scale(1)" }} />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>Diagnosis</div>
+            <input value={diag} onChange={(e) => setDiag(e.target.value)} placeholder="Primary diagnosis" style={inp} />
+          </div>
+          <div>
+            <div className="text-xs mb-1" style={{ color: c.muted, fontWeight: 600 }}>Session address (optional)</div>
+            <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Home / clinic address" style={inp} />
+          </div>
+        </div>
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl text-sm" style={{ background: c.bg, color: c.muted, fontWeight: 600 }}>Cancel</button>
+          <button onClick={save} disabled={!name.trim() || !age}
+            className="flex-1 py-3 rounded-xl text-sm active:scale-95"
+            style={{ background: name.trim() && age ? c.primary : c.line, color: "#fff", fontWeight: 700 }}>
+            Add client
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

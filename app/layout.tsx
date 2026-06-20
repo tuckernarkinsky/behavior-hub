@@ -14,8 +14,21 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Behavior Hub",
-  description:
-    "ABA data collection with AI-native documentation — probe data, ABC logging, and insurance-ready session notes.",
+  description: "ABA therapy management for BCBA clinics",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Behavior Hub",
+  },
+  formatDetection: { telephone: false },
+};
+
+export const viewport = {
+  themeColor: "#0E9F8F",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({
@@ -28,20 +41,15 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Behavior Hub" />
+        <meta name="mobile-web-app-capable" content="yes" />
+      </head>
       <body className="min-h-full flex flex-col">
-        <div
-          style={{
-            background: "#1B2A28",
-            color: "#F4F1EA",
-            textAlign: "center",
-            fontSize: 12,
-            fontWeight: 600,
-            padding: "6px 12px",
-            letterSpacing: "0.02em",
-          }}
-        >
-          Demo — fake data only. No real client information.
-        </div>
         {children}
       </body>
     </html>

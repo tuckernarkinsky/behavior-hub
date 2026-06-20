@@ -193,6 +193,26 @@ async function loadUserProfile(supabaseUser) {
 const EXTRA_CLIENTS_KEY = "bh_extra_clients_v1";
 function loadExtraClients() { try { const r = localStorage.getItem(EXTRA_CLIENTS_KEY); return r ? JSON.parse(r) : []; } catch { return []; } }
 function saveExtraClients(arr) { try { localStorage.setItem(EXTRA_CLIENTS_KEY, JSON.stringify(arr)); } catch {} }
+async function saveClientToSupabase(client, userId) {
+  try {
+    const { data: profile } = await supabase.from("profiles").select("organization_id").eq("id", userId).single();
+    await supabase.from("clients").insert({
+      name: client.name, age: client.age ?? null, color: client.color ?? "#0E9F8F",
+      diagnosis: client.diagnosis ?? null, organization_id: profile?.organization_id ?? null, created_by: userId,
+    });
+  } catch {}
+}
+async function loadClientsFromSupabase(userId) {
+  try {
+    const { data: profile } = await supabase.from("profiles").select("organization_id").eq("id", userId).single();
+    if (!profile?.organization_id) return [];
+    const { data } = await supabase.from("clients").select("*").eq("organization_id", profile.organization_id);
+    return (data ?? []).map((c) => ({
+      id: c.id, name: c.name, age: c.age ?? "—", color: c.color ?? "#0E9F8F",
+      diagnosis: c.diagnosis ?? "—", address: c.address ?? "—", programs: c.programs ?? 0, behaviors: c.behaviors ?? 0,
+    }));
+  } catch { return []; }
+}
 
 // ---------------- Session notes archive ----------------
 const NOTE_KEY = (clientId, date) => `bh_note_${clientId}_${date}`;
@@ -510,7 +530,10 @@ export default function BehaviorHubRBT() {
   };
 
   const addSession = (sess) => { const u = [...schedule, sess]; setSchedule(u); saveSchedule(u); };
-  const addClient  = (cl)   => { const u = [...extraClients, cl]; setExtraClients(u); saveExtraClients(u); };
+  const addClient  = (cl)   => {
+    const u = [...extraClients, cl]; setExtraClients(u); saveExtraClients(u);
+    if (currentUser?.id) saveClientToSupabase(cl, currentUser.id);
+  };
 
   const touchX = useRef(null);
   const TABS = ["schedule", "clients", "chat", "staff"];
@@ -560,6 +583,14 @@ export default function BehaviorHubRBT() {
     setNotifGranted(typeof Notification !== "undefined" && Notification.permission === "granted");
   }, []);
 
+  // Load org clients from Supabase
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    loadClientsFromSupabase(currentUser.id).then((dbClients) => {
+      if (dbClients.length > 0) setExtraClients(dbClients);
+    });
+  }, [currentUser?.id]);
+
   useEffect(() => {
     if (notifGranted) scheduleSessionNotifs(schedule, allClients);
   }, [notifGranted, schedule]);
@@ -593,6 +624,20 @@ export default function BehaviorHubRBT() {
         <LoginScreen onLogin={login} />
       </div>
     );
+  }
+
+  // Onboarding: new user with no role/org set
+  if (!currentUser.role || currentUser.role === "RBT" && !currentUser.organization) {
+    // Only show onboarding if profile is truly blank (no name beyond email prefix)
+    const needsOnboarding = !currentUser.organization && currentUser.name === currentUser.email?.split("@")[0];
+    if (needsOnboarding) {
+      return (
+        <div className="font-body min-h-screen w-full" style={{ background: c.bg, color: c.ink }}>
+          <style>{FONTS}</style>
+          <OnboardingScreen user={currentUser} onComplete={(updated) => setCurrentUser(updated)} />
+        </div>
+      );
+    }
   }
 
   return (
@@ -2421,8 +2466,15 @@ function LoginScreen({ onLogin }) {
     setLoading(true); setError("");
     try {
       const { error: err } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
-      if (err) { setError(err.message); setLoading(false); }
-    } catch (e) { setError("Google sign-in failed."); setLoading(false); }
+      if (err) {
+        if (err.message?.includes("provider is not enabled") || err.message?.includes("Unsupported provider")) {
+          setError("Google sign-in isn't configured yet. Use email/password for now.");
+        } else {
+          setError(err.message);
+        }
+        setLoading(false);
+      }
+    } catch (e) { setError("Google sign-in failed. Use email/password instead."); setLoading(false); }
   };
 
   const handleQuickLogin = async (acct) => {
@@ -2759,6 +2811,96 @@ function AddClientModal({ onClose, onAdd }) {
             Add client
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- Onboarding Screen ----------------
+function OnboardingScreen({ user, onComplete }) {
+  const [orgName, setOrgName] = useState("");
+  const [role, setRole]       = useState("RBT");
+  const [name, setName]       = useState(user.name || "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
+
+  const roles = ["RBT", "BCBA", "BCaBA", "OT", "PT", "Admin"];
+
+  const handleSave = async () => {
+    if (!name.trim()) { setError("Enter your name"); return; }
+    setLoading(true); setError("");
+    try {
+      const initials = name.trim().split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+      const colors = ["#0E9F8F","#7C3AED","#DC2626","#D97706","#059669","#2563EB"];
+      const color  = colors[Math.floor(Math.random() * colors.length)];
+
+      // Upsert org if provided
+      let orgId = null;
+      if (orgName.trim()) {
+        const { data: existingOrg } = await supabase.from("organizations").select("id").eq("name", orgName.trim()).single();
+        if (existingOrg) {
+          orgId = existingOrg.id;
+        } else {
+          const { data: newOrg } = await supabase.from("organizations").insert({ name: orgName.trim() }).select("id").single();
+          orgId = newOrg?.id;
+        }
+      }
+
+      await supabase.from("profiles").upsert({
+        id: user.id, name: name.trim(), role, initials, color,
+        ...(orgId ? { organization_id: orgId } : {}),
+      });
+
+      onComplete({ ...user, name: name.trim(), role, initials, color, organization: orgName.trim() });
+    } catch (e) { setError("Save failed. Try again."); setLoading(false); }
+  };
+
+  const inputStyle = {
+    background: c.surface, border: `1.5px solid ${c.line}`, borderRadius: 14,
+    padding: "12px 16px", fontSize: 15, color: c.ink, width: "100%", outline: "none",
+    fontFamily: "DM Sans, sans-serif", marginBottom: 12,
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 pb-10" style={{ background: c.bg }}>
+      <div className="mb-8 text-center">
+        <div className="font-display text-3xl mb-1" style={{ fontWeight: 900, color: c.ink }}>Welcome 👋</div>
+        <div className="text-sm" style={{ color: c.muted }}>Let's set up your profile</div>
+      </div>
+
+      <div className="w-full" style={{ maxWidth: 360 }}>
+        <div className="text-xs mb-1.5 font-display" style={{ color: c.muted, fontWeight: 700 }}>YOUR NAME</div>
+        <input type="text" placeholder="Full name" value={name} autoFocus
+          onChange={(e) => { setName(e.target.value); setError(""); }} style={inputStyle} />
+
+        <div className="text-xs mb-1.5 font-display" style={{ color: c.muted, fontWeight: 700 }}>YOUR ROLE</div>
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          {roles.map((r) => (
+            <button key={r} onClick={() => setRole(r)}
+              className="py-2.5 rounded-xl text-sm transition-all active:scale-95"
+              style={{
+                fontWeight: 700, fontFamily: "Bricolage Grotesque, sans-serif",
+                background: role === r ? c.primary : c.surface,
+                color: role === r ? "#fff" : c.ink,
+                border: `1.5px solid ${role === r ? c.primary : c.line}`,
+              }}>
+              {r}
+            </button>
+          ))}
+        </div>
+
+        <div className="text-xs mb-1.5 font-display" style={{ color: c.muted, fontWeight: 700 }}>CLINIC / ORGANIZATION <span style={{ color: c.muted, fontWeight: 400 }}>(optional)</span></div>
+        <input type="text" placeholder="e.g. Cayer Behavioral Group" value={orgName}
+          onChange={(e) => setOrgName(e.target.value)} style={inputStyle}
+          onKeyDown={(e) => e.key === "Enter" && handleSave()} />
+
+        {error && <div className="text-xs mb-3 text-center" style={{ color: c.accent }}>{error}</div>}
+
+        <button onClick={handleSave} disabled={loading}
+          className="w-full py-3.5 rounded-2xl font-display text-white transition-all active:scale-98"
+          style={{ background: c.primary, fontWeight: 700, fontSize: 16, border: "none", cursor: "pointer", marginTop: 4 }}>
+          {loading ? "Saving…" : "Get Started →"}
+        </button>
       </div>
     </div>
   );

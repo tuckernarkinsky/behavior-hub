@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from "react";
+import { supabase } from "./lib/supabase";
 import {
   ArrowLeft, Plus, Minus, Mic, MicOff, Sparkles, FileText,
   ClipboardList, Activity, ChevronRight, TrendingUp, Loader2,
@@ -155,19 +156,38 @@ function getWeekDays(baseDate) {
   return Array.from({ length: 7 }, (_, i) => { const nd = new Date(mon); nd.setDate(mon.getDate() + i); return nd.toISOString().split("T")[0]; });
 }
 function certDaysLeft(exp) { return Math.ceil((new Date(exp) - new Date()) / (1000 * 60 * 60 * 24)); }
-// ---------------- Auth ----------------
-const PINS = {
-  "Tucker":       "1234",
-  "Kayla R.":     "2345",
-  "Sam T.":       "3456",
-  "Jamie L.":     "4567",
-  "Dr. Martinez": "0000",
-  "Dr. Chen":     "9999",
-};
-const BH_AUTH = "bh_auth_v1";
-function getStoredUser() { try { return JSON.parse(sessionStorage?.getItem(BH_AUTH) || "null"); } catch { return null; } }
-function storeUser(u)    { try { sessionStorage.setItem(BH_AUTH, JSON.stringify(u)); } catch {} }
-function clearStoredUser(){ try { sessionStorage.removeItem(BH_AUTH); } catch {} }
+// ---------------- Auth (Supabase) ----------------
+const SAVED_ACCOUNTS_KEY = "bh_saved_accounts";
+function loadSavedAccounts() {
+  try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
+}
+function saveAccountToList(user) {
+  try {
+    const existing = loadSavedAccounts().filter((a) => a.email !== user.email);
+    localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify([user, ...existing].slice(0, 5)));
+  } catch {}
+}
+function removeAccountFromList(email) {
+  try {
+    const updated = loadSavedAccounts().filter((a) => a.email !== email);
+    localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
+  } catch {}
+}
+async function loadUserProfile(supabaseUser) {
+  try {
+    const { data } = await supabase.from("profiles").select("*").eq("id", supabaseUser.id).single();
+    const name = data?.name || supabaseUser.user_metadata?.full_name || supabaseUser.email?.split("@")[0] || "User";
+    return {
+      id: supabaseUser.id,
+      email: supabaseUser.email,
+      name,
+      role: data?.role ?? "RBT",
+      initials: data?.initials ?? name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0,2),
+      color: data?.color ?? "#0E9F8F",
+      organization: data?.organization ?? "Behavior Hub",
+    };
+  } catch { return { id: supabaseUser.id, email: supabaseUser.email, name: supabaseUser.email, role: "RBT", initials: "?", color: "#0E9F8F", organization: "" }; }
+}
 
 // ---------------- Extra clients (user-added) ----------------
 const EXTRA_CLIENTS_KEY = "bh_extra_clients_v1";
@@ -467,7 +487,8 @@ Therapist note: "${text}"`);
 
 // ================= APP =================
 export default function BehaviorHubRBT() {
-  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [navTab, setNavTab]       = useState("schedule");
   const [screen, setScreen]       = useState("main");
   const [client, setClient]       = useState(null);
@@ -482,8 +503,11 @@ export default function BehaviorHubRBT() {
 
   const allClients = [...CLIENTS, ...extraClients];
 
-  const login  = (u) => { storeUser(u);    setCurrentUser(u); };
-  const logout = ()  => { clearStoredUser(); setCurrentUser(null); };
+  const login  = (profile) => { setCurrentUser(profile); };
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+  };
 
   const addSession = (sess) => { const u = [...schedule, sess]; setSchedule(u); saveSchedule(u); };
   const addClient  = (cl)   => { const u = [...extraClients, cl]; setExtraClients(u); saveExtraClients(u); };
@@ -505,6 +529,31 @@ export default function BehaviorHubRBT() {
   const goToSession   = (cl) => { setClient(cl); setScreen("session"); };
   const goBack        = () => { setScreen("main"); setNavTab(backTo); };
 
+  // Supabase auth: restore session on mount, listen for changes
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const profile = await loadUserProfile(session.user);
+        setCurrentUser(profile);
+      }
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        const profile = await loadUserProfile(session.user);
+        saveAccountToList({ email: session.user.email, name: profile.name, initials: profile.initials, color: profile.color });
+        setCurrentUser(profile);
+        setAuthLoading(false);
+      } else if (event === "SIGNED_OUT") {
+        setCurrentUser(null);
+        setAuthLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   useEffect(() => {
     const cid = new URLSearchParams(window.location.search).get("supervisor");
     if (cid) setSupervisorClientId(cid);
@@ -521,6 +570,18 @@ export default function BehaviorHubRBT() {
       <div className="font-body min-h-screen w-full" style={{ background: c.bg, color: c.ink }}>
         <style>{FONTS}</style>
         <div className="max-w-3xl mx-auto px-4 py-5"><SupervisorView client={sc} /></div>
+      </div>
+    );
+  }
+
+  if (authLoading) {
+    return (
+      <div className="font-body min-h-screen w-full flex items-center justify-center" style={{ background: c.bg }}>
+        <style>{FONTS}</style>
+        <div className="flex flex-col items-center gap-3">
+          <div className="font-display text-2xl" style={{ fontWeight: 800, color: c.ink }}>Behavior Hub</div>
+          <div className="text-sm" style={{ color: c.muted }}>Loading…</div>
+        </div>
       </div>
     );
   }
@@ -2318,92 +2379,196 @@ function WeekCalendarView({ sessions, clients, onStartSession, onViewClient }) {
 
 // ---------------- Login Screen ----------------
 function LoginScreen({ onLogin }) {
-  const [selected, setSelected] = useState(null);
-  const [pin, setPin]           = useState("");
+  const [view, setView]         = useState("accounts"); // accounts | email | password | signup
+  const [email, setEmail]       = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName]         = useState("");
+  const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+  const [savedAccounts, setSavedAccounts] = useState(() => loadSavedAccounts());
 
-  const members = Object.entries(TEAM_MEMBERS).map(([name, m]) => ({ name, ...m }));
-
-  const handlePin = (digit) => {
-    if (pin.length >= 4) return;
-    const next = pin + digit;
-    setPin(next);
-    setError("");
-    if (next.length === 4) {
-      if (PINS[selected.name] === next) {
-        onLogin({ name: selected.name, role: selected.role, initials: selected.initials, color: selected.color });
-      } else {
-        setTimeout(() => { setPin(""); setError("Wrong PIN — try again"); }, 400);
-      }
-    }
+  const handleEmailLogin = async () => {
+    if (!email || !password) { setError("Enter your email and password"); return; }
+    setLoading(true); setError("");
+    try {
+      const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
+      if (err) { setError(err.message); setLoading(false); return; }
+      const profile = await loadUserProfile(data.user);
+      saveAccountToList({ email: data.user.email, name: profile.name, initials: profile.initials, color: profile.color });
+      onLogin(profile);
+    } catch (e) { setError("Sign-in failed. Try again."); setLoading(false); }
   };
 
-  const selStyle = { background: c.surface, border: `2px solid ${c.primary}`, transform: "scale(1.04)", boxShadow: `0 0 0 4px ${c.primarySoft}` };
-  const norStyle = { background: c.surface, border: `1px solid ${c.line}` };
+  const handleSignup = async () => {
+    if (!email || !password || !name) { setError("Fill in all fields"); return; }
+    setLoading(true); setError("");
+    try {
+      const { data, error: err } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
+      if (err) { setError(err.message); setLoading(false); return; }
+      if (data.user) {
+        await supabase.from("profiles").upsert({ id: data.user.id, email, name, role: "RBT", initials: name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0,2), color: "#0E9F8F", organization: "" });
+        const profile = await loadUserProfile(data.user);
+        saveAccountToList({ email, name: profile.name, initials: profile.initials, color: profile.color });
+        onLogin(profile);
+      } else {
+        setError("Check your email to confirm your account, then sign in.");
+        setLoading(false);
+      }
+    } catch (e) { setError("Sign-up failed. Try again."); setLoading(false); }
+  };
 
-  if (!selected) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 pb-10">
-        <div className="font-display text-3xl mb-1 text-center" style={{ fontWeight: 800, color: c.ink }}>Behavior Hub</div>
-        <div className="text-sm mb-8 text-center" style={{ color: c.muted }}>Cayer Behavioral Group · select your profile</div>
-        <div className="grid grid-cols-3 gap-3 w-full max-w-sm">
-          {members.map((m) => {
-            const roleC  = ROLE_COLOR[m.role]  ?? c.muted;
-            const roleBg = ROLE_BG[m.role]     ?? c.bg;
-            return (
-              <button key={m.name} onClick={() => setSelected(m)}
-                className="flex flex-col items-center gap-2 p-3 rounded-2xl transition-all active:scale-95"
-                style={{ background: c.surface, border: `1px solid ${c.line}` }}>
-                <div className="grid place-items-center rounded-full font-display"
-                  style={{ width: 52, height: 52, background: m.color, color: "#fff", fontWeight: 800, fontSize: 16 }}>
-                  {m.initials}
-                </div>
-                <div className="text-xs text-center leading-tight" style={{ fontWeight: 700 }}>{m.name.split(" ")[0]}</div>
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: roleBg, color: roleC, fontWeight: 700 }}>{m.role}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
+  const handleGoogle = async () => {
+    setLoading(true); setError("");
+    try {
+      const { error: err } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
+      if (err) { setError(err.message); setLoading(false); }
+    } catch (e) { setError("Google sign-in failed."); setLoading(false); }
+  };
+
+  const handleQuickLogin = async (acct) => {
+    setEmail(acct.email);
+    setView("password");
+  };
+
+  const removeAccount = (e, email) => {
+    e.stopPropagation();
+    removeAccountFromList(email);
+    setSavedAccounts(loadSavedAccounts());
+  };
+
+  const inputStyle = {
+    background: c.surface, border: `1.5px solid ${c.line}`, borderRadius: 14,
+    padding: "12px 16px", fontSize: 15, color: c.ink, width: "100%", outline: "none",
+    fontFamily: "DM Sans, sans-serif", marginBottom: 10,
+  };
+  const btnPrimary = {
+    background: c.primary, color: "#fff", border: "none", borderRadius: 14,
+    padding: "14px 0", fontSize: 15, fontWeight: 700, width: "100%", cursor: "pointer",
+    fontFamily: "Bricolage Grotesque, sans-serif", letterSpacing: 0.2, marginBottom: 10,
+  };
+  const btnGoogle = {
+    background: c.surface, color: c.ink, border: `1.5px solid ${c.line}`, borderRadius: 14,
+    padding: "13px 0", fontSize: 15, fontWeight: 600, width: "100%", cursor: "pointer",
+    fontFamily: "DM Sans, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10,
+  };
+  const btnGhost = { background: "none", border: "none", color: c.primary, cursor: "pointer", fontSize: 14, fontWeight: 600, padding: "4px 0" };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 pb-10">
-      <div className="grid place-items-center rounded-full font-display mb-3"
-        style={{ width: 72, height: 72, background: selected.color, color: "#fff", fontWeight: 800, fontSize: 22 }}>
-        {selected.initials}
-      </div>
-      <div className="font-display text-xl mb-0.5" style={{ fontWeight: 800 }}>{selected.name}</div>
-      <div className="text-sm mb-6" style={{ color: c.muted }}>Enter your 4-digit PIN</div>
-
-      {/* PIN dots */}
-      <div className="flex gap-3 mb-2">
-        {[0,1,2,3].map((i) => (
-          <div key={i} className="w-4 h-4 rounded-full transition-all"
-            style={{ background: pin.length > i ? c.primary : c.line, transform: pin.length > i ? "scale(1.3)" : "scale(1)" }} />
-        ))}
-      </div>
-      {error && <div className="text-xs mb-4" style={{ color: c.accent }}>{error}</div>}
-      {!error && <div className="mb-4" style={{ height: 18 }} />}
-
-      {/* Numpad */}
-      <div className="grid grid-cols-3 gap-3 w-56">
-        {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((d, i) => (
-          d === "" ? <div key={i} /> :
-          <button key={i} onClick={() => d === "⌫" ? setPin(p => p.slice(0,-1)) : handlePin(String(d))}
-            className="h-14 rounded-2xl font-display text-xl active:scale-95 transition-transform"
-            style={{ background: c.surface, border: `1px solid ${c.line}`, fontWeight: 700, color: c.ink }}>
-            {d}
-          </button>
-        ))}
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 pb-10" style={{ background: c.bg }}>
+      {/* Logo */}
+      <div className="mb-8 text-center">
+        <div className="font-display text-4xl mb-1" style={{ fontWeight: 900, color: c.ink, letterSpacing: -1 }}>Behavior Hub</div>
+        <div className="text-sm" style={{ color: c.muted }}>ABA therapy management</div>
       </div>
 
-      <button onClick={() => { setSelected(null); setPin(""); setError(""); }}
-        className="mt-6 text-sm" style={{ color: c.muted }}>← Back</button>
+      <div className="w-full" style={{ maxWidth: 360 }}>
 
-      <div className="mt-8 p-3 rounded-xl text-xs text-center" style={{ background: c.primarySoft, color: c.muted, maxWidth: 240 }}>
-        Demo PINs: RBTs use <b style={{color:c.primary}}>1234–4567</b> · BCBAs use <b style={{color:c.purple}}>0000 / 9999</b>
+        {/* Saved accounts list */}
+        {savedAccounts.length > 0 && view === "accounts" && (
+          <div className="mb-4">
+            <div className="text-xs mb-2 font-display" style={{ color: c.muted, fontWeight: 700, letterSpacing: 0.5 }}>QUICK SIGN IN</div>
+            <div className="grid gap-2">
+              {savedAccounts.map((acct) => (
+                <button key={acct.email} onClick={() => handleQuickLogin(acct)}
+                  className="flex items-center gap-3 p-3 rounded-2xl active:scale-98 transition-transform text-left w-full"
+                  style={{ background: c.surface, border: `1px solid ${c.line}` }}>
+                  <div className="grid place-items-center rounded-full font-display shrink-0"
+                    style={{ width: 44, height: 44, background: acct.color ?? c.primary, color: "#fff", fontWeight: 800, fontSize: 15 }}>
+                    {acct.initials ?? "?"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-display text-sm" style={{ fontWeight: 700 }}>{acct.name}</div>
+                    <div className="text-xs truncate" style={{ color: c.muted }}>{acct.email}</div>
+                  </div>
+                  <button onClick={(e) => removeAccount(e, acct.email)} style={{ color: c.muted, background: "none", border: "none", cursor: "pointer", padding: 4, fontSize: 16 }}>×</button>
+                </button>
+              ))}
+            </div>
+            <div className="text-xs text-center mt-3 mb-4" style={{ color: c.muted }}>— or sign in with another account —</div>
+          </div>
+        )}
+
+        {/* Email / password flow */}
+        {(view === "accounts" || view === "email") && (
+          <>
+            <input type="email" placeholder="Email address" value={email}
+              onChange={(e) => { setEmail(e.target.value); setError(""); }}
+              style={inputStyle} onKeyDown={(e) => e.key === "Enter" && setView("password")} />
+            {view === "email" && (
+              <>
+                <input type="password" placeholder="Password" value={password} autoFocus
+                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                  style={inputStyle} onKeyDown={(e) => e.key === "Enter" && handleEmailLogin()} />
+                {error && <div className="text-xs mb-3 text-center" style={{ color: c.accent }}>{error}</div>}
+                <button style={btnPrimary} onClick={handleEmailLogin} disabled={loading}>
+                  {loading ? "Signing in…" : "Sign In"}
+                </button>
+                <button style={btnGhost} onClick={() => { setView("accounts"); setPassword(""); setError(""); }}>← Back</button>
+              </>
+            )}
+            {view === "accounts" && (
+              <button style={btnPrimary} onClick={() => { if (!email) { setError("Enter your email first"); return; } setView("email"); }} disabled={loading}>
+                Continue with Email →
+              </button>
+            )}
+            {error && view === "accounts" && <div className="text-xs mb-2 text-center" style={{ color: c.accent }}>{error}</div>}
+          </>
+        )}
+
+        {/* Password screen (quick login) */}
+        {view === "password" && (
+          <>
+            <div className="text-sm mb-3" style={{ color: c.muted }}>Signing in as <b style={{ color: c.ink }}>{email}</b></div>
+            <input type="password" placeholder="Password" value={password} autoFocus
+              onChange={(e) => { setPassword(e.target.value); setError(""); }}
+              style={inputStyle} onKeyDown={(e) => e.key === "Enter" && handleEmailLogin()} />
+            {error && <div className="text-xs mb-3 text-center" style={{ color: c.accent }}>{error}</div>}
+            <button style={btnPrimary} onClick={handleEmailLogin} disabled={loading}>
+              {loading ? "Signing in…" : "Sign In"}
+            </button>
+            <button style={btnGhost} onClick={() => { setView("accounts"); setPassword(""); setError(""); }}>← Back</button>
+          </>
+        )}
+
+        {/* Sign-up form */}
+        {view === "signup" && (
+          <>
+            <div className="font-display text-lg mb-4 text-center" style={{ fontWeight: 800 }}>Create your account</div>
+            <input type="text" placeholder="Full name" value={name} autoFocus
+              onChange={(e) => { setName(e.target.value); setError(""); }} style={inputStyle} />
+            <input type="email" placeholder="Email address" value={email}
+              onChange={(e) => { setEmail(e.target.value); setError(""); }} style={inputStyle} />
+            <input type="password" placeholder="Password (8+ chars)" value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(""); }}
+              style={inputStyle} onKeyDown={(e) => e.key === "Enter" && handleSignup()} />
+            {error && <div className="text-xs mb-3 text-center" style={{ color: c.accent }}>{error}</div>}
+            <button style={btnPrimary} onClick={handleSignup} disabled={loading}>
+              {loading ? "Creating account…" : "Create Account"}
+            </button>
+            <button style={btnGhost} onClick={() => { setView("accounts"); setError(""); }}>← Back to sign in</button>
+          </>
+        )}
+
+        {/* Divider + Google */}
+        {view !== "signup" && (
+          <>
+            <div style={{ height: 1, background: c.line, margin: "16px 0" }} />
+            <button style={btnGoogle} onClick={handleGoogle} disabled={loading}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.859-3.048.859-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
+                <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+                <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+              </svg>
+              Continue with Google
+            </button>
+            <div className="text-center mt-2">
+              <button style={btnGhost} onClick={() => { setView("signup"); setError(""); }}>
+                No account? Sign up →
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

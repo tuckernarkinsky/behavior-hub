@@ -8,7 +8,7 @@ import {
   ClipboardList, Activity, ChevronRight, TrendingUp, Loader2,
   BookOpen, Brain, Undo2, FileSignature, Calendar, Check, X,
   ChevronDown, RotateCcw, Eye, MessageSquare, Shield, Zap, Copy,
-  Users, MapPin, Navigation, Send, Clock, CalendarPlus, UserCog, ChevronLeft,
+  Users, MapPin, Navigation, Send, Clock, CalendarPlus, ChevronLeft,
 } from "lucide-react";
 
 // ---------------- Palette (happy + professional) ----------------
@@ -35,25 +35,34 @@ const FONTS = `
 .font-display{font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-0.02em}
 .font-body{font-family:'DM Sans',sans-serif}
 
-@keyframes bh-border-pulse {
-  0%,100% { box-shadow: 0 0 0 0 rgba(249,115,22,0), inset 0 0 0 3px rgba(249,115,22,0.9); }
-  50%      { box-shadow: 0 0 0 18px rgba(249,115,22,0), inset 0 0 0 3px rgba(249,115,22,1); }
-}
-@keyframes bh-glow-pulse {
-  0%,100% { box-shadow: 0 0 0 2px #F97316, 0 0 20px 4px rgba(249,115,22,0.35); }
-  50%      { box-shadow: 0 0 0 3px #F97316, 0 0 40px 12px rgba(249,115,22,0.55); }
-}
 @keyframes bh-mic-ring {
   0%,100% { transform: scale(1);   opacity: 1; }
   50%      { transform: scale(1.12); opacity: 0.85; }
 }
-.bh-listening-border {
-  animation: bh-glow-pulse 1.4s ease-in-out infinite;
-  border-radius: 0 !important;
-  position: relative;
-  z-index: 0;
-}
 .bh-mic-pulse { animation: bh-mic-ring 1.4s ease-in-out infinite; }
+
+/* Claude Cowork–style loading bubble border: soft, rounded, flowing gradient that breathes */
+@property --bh-ang { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes bh-cowork-spin { to { --bh-ang: 360deg; } }
+@keyframes bh-cowork-breathe {
+  0%,100% { opacity: 0.82; filter: drop-shadow(0 0 6px rgba(249,115,22,0.45)); }
+  50%      { opacity: 1;    filter: drop-shadow(0 0 16px rgba(249,115,22,0.7)); }
+}
+.bh-cowork-border {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  border-radius: 30px;
+  padding: 3.5px;
+  background: conic-gradient(from var(--bh-ang),
+    #F97316, #FDBA74, #FB923C, #F59E0B, #FDBA74, #EA580C, #F97316);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  animation: bh-cowork-spin 4s linear infinite, bh-cowork-breathe 2s ease-in-out infinite;
+}
 `;
 
 // ---------------- Seed data ----------------
@@ -369,19 +378,51 @@ function useDictation() {
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(true);
   const recRef = useRef(null);
-  const start = (onText) => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setSupported(false); return; }
+  const finalRef = useRef("");
+  const start = (onText, onError) => {
+    const SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+    if (!SR) {
+      setSupported(false);
+      onError?.("Voice input isn't supported in this browser. Try Chrome (or type your note instead).");
+      return;
+    }
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      onError?.("Voice input needs a secure (https) connection.");
+      return;
+    }
     try {
       const rec = new SR();
       rec.continuous = true; rec.interimResults = true; rec.lang = "en-US";
-      rec.onresult = (e) => { let f = ""; for (let i = 0; i < e.results.length; i++) f += e.results[i][0].transcript + " "; onText(f.trim()); };
-      rec.onerror = () => { setSupported(false); setListening(false); };
+      finalRef.current = "";
+      rec.onresult = (e) => {
+        let interim = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const r = e.results[i];
+          if (r.isFinal) finalRef.current += r[0].transcript + " ";
+          else interim += r[0].transcript;
+        }
+        onText((finalRef.current + interim).trim());
+      };
+      rec.onerror = (e) => {
+        const err = e?.error;
+        if (err === "no-speech" || err === "aborted") return; // transient — ignore
+        setListening(false);
+        if (err === "not-allowed" || err === "service-not-allowed")
+          onError?.("Microphone access is blocked. Allow mic access in your browser settings, then try again.");
+        else if (err === "audio-capture")
+          onError?.("No microphone found. Check your device's mic and try again.");
+        else if (err === "network")
+          onError?.("Couldn't reach the voice service. Check your connection and try again.");
+        else onError?.("Voice input stopped unexpectedly. Please try again, or type your note.");
+      };
       rec.onend = () => setListening(false);
       recRef.current = rec; rec.start(); setListening(true);
-    } catch { setSupported(false); }
+    } catch {
+      setListening(false);
+      onError?.("Couldn't start voice input. Please type your note instead.");
+    }
   };
-  const stop = () => { recRef.current?.stop(); setListening(false); };
+  const stop = () => { try { recRef.current?.stop(); } catch {} setListening(false); };
   return { listening, supported, start, stop };
 }
 
@@ -536,7 +577,7 @@ export default function BehaviorHubRBT() {
   };
 
   const touchX = useRef(null);
-  const TABS = ["schedule", "clients", "chat", "staff"];
+  const TABS = ["schedule", "clients", "messages"];
   const handleTouchStart = (e) => { if (screen === "main") touchX.current = e.touches[0].clientX; };
   const handleTouchEnd   = (e) => {
     if (screen !== "main" || touchX.current === null) return;
@@ -547,7 +588,7 @@ export default function BehaviorHubRBT() {
     touchX.current = null;
   };
 
-  const switchTab = (tab) => { setNavTab(tab); setScreen("main"); if (tab === "chat") setChatBadge(false); };
+  const switchTab = (tab) => { setNavTab(tab); setScreen("main"); if (tab === "messages") setChatBadge(false); };
   const goToClientHub = (cl, from) => { setClient(cl); setBackTo(from ?? navTab); setScreen("clientHub"); };
   const goToSession   = (cl) => { setClient(cl); setScreen("session"); };
   const goBack        = () => { setScreen("main"); setNavTab(backTo); };
@@ -660,10 +701,7 @@ export default function BehaviorHubRBT() {
         {screen === "main" && navTab === "clients" && (
           <ClientsScreen clients={allClients} onOpen={(cl) => goToClientHub(cl, "clients")} onAddClient={() => setAddingClient(true)} />
         )}
-        {screen === "main" && navTab === "chat" && <ChatScreen />}
-        {screen === "main" && navTab === "staff" && (
-          <StaffScreen clients={allClients} onOpenClient={(cl, from) => goToClientHub(cl, from ?? "staff")} />
-        )}
+        {screen === "main" && navTab === "messages" && <ChatScreen />}
         {screen === "clientHub" && client && (
           <ClientHub client={client} onBack={goBack} onStart={() => goToSession(client)} />
         )}
@@ -685,8 +723,7 @@ function BottomNav({ tab, onChange, chatBadge }) {
   const tabs = [
     { k: "schedule", label: "Schedule", icon: Calendar },
     { k: "clients",  label: "Clients",  icon: Users },
-    { k: "chat",     label: "Chat",     icon: MessageSquare },
-    { k: "staff",    label: "Team",     icon: UserCog },
+    { k: "messages", label: "Messages", icon: MessageSquare },
   ];
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 flex" style={{ background: c.surface, borderTop: `1px solid ${c.line}`, paddingBottom: "env(safe-area-inset-bottom,8px)" }}>
@@ -694,7 +731,7 @@ function BottomNav({ tab, onChange, chatBadge }) {
         const A = tab === t.k; const Icon = t.icon;
         return (
           <button key={t.k} onClick={() => onChange(t.k)} className="flex-1 flex flex-col items-center gap-1 py-3 relative">
-            {t.k === "chat" && chatBadge && (
+            {t.k === "messages" && chatBadge && (
               <span className="absolute top-2.5 right-[calc(50%-14px)] w-2 h-2 rounded-full" style={{ background: c.accent }} />
             )}
             <Icon size={21} style={{ color: A ? c.primary : c.muted }} />
@@ -951,33 +988,61 @@ function ClientsScreen({ clients, onOpen, onAddClient }) {
 const ROLE_COLOR = { BCBA: c.purple, OT: "#EC4899", PT: "#14B8A6", Peds: "#EF4444", RBT: c.primary };
 const ROLE_BG    = { BCBA: c.purpleSoft, OT: "#FCE7F3", PT: "#CCFBF1", Peds: "#FEE2E2", RBT: c.primarySoft };
 
-// ---- Build a flat inbox list ----
-function buildInbox() {
-  const rows = [];
-  // Channels first
-  Object.entries(CHANNELS).forEach(([id, ch]) => {
-    const msgs = ch.messages;
-    const last = msgs[msgs.length - 1];
-    rows.push({ type: "channel", id, name: ch.name, icon: ch.icon, description: ch.description, lastMsg: last?.text ?? "", lastTime: last?.time ?? "", lastDate: last?.date ?? "", lastSender: last?.sender ?? "", unread: false });
-  });
-  // DMs
-  Object.entries(DMS).forEach(([name, msgs]) => {
-    const member = TEAM_MEMBERS[name] || { color: c.muted, initials: name[0], role: "" };
-    const last   = msgs[msgs.length - 1];
-    const unread = last && last.sender !== CURRENT_USER;
-    rows.push({ type: "dm", id: name, name, member, lastMsg: last?.text ?? "", lastTime: last?.time ?? "", lastDate: last?.date ?? "", lastSender: last?.sender ?? "", unread });
-  });
-  return rows;
+// ---- Last DM preview for a contact ----
+function dmPreview(name) {
+  const msgs = DMS[name] ?? [];
+  const last = msgs[msgs.length - 1];
+  return { lastMsg: last?.text ?? "", lastTime: last?.time ?? "", unread: !!(last && last.sender !== CURRENT_USER) };
 }
 
-// ---------------- Chat Screen (inbox → conversation) ----------------
+// ---------------- Messages / Contacts Screen ----------------
+// Team directory + direct messaging merged into one page. Tap a contact to message them.
 function ChatScreen() {
-  const [open, setOpen] = useState(null); // null = inbox, or { type, id }
-  const inbox = buildInbox();
+  const [open, setOpen] = useState(null); // null = contacts list, or { type:"dm", id }
 
   if (open) {
     return <ChatConversation view={open} onBack={() => setOpen(null)} />;
   }
+
+  const contacts = Object.entries(TEAM_MEMBERS).filter(([name]) => name !== CURRENT_USER);
+  const groups = [
+    { title: "BCBAs",             rows: contacts.filter(([, m]) => m.role === "BCBA") },
+    { title: "RBTs",              rows: contacts.filter(([, m]) => m.role === "RBT") },
+    { title: "Other specialists", rows: contacts.filter(([, m]) => !["BCBA", "RBT"].includes(m.role)) },
+  ].filter((g) => g.rows.length);
+
+  const ContactRow = ({ name, member, i, len }) => {
+    const { lastMsg, lastTime, unread } = dmPreview(name);
+    const det    = STAFF_DETAILS[name];
+    const roleC  = ROLE_COLOR[member.role] ?? c.muted;
+    const roleBg = ROLE_BG[member.role]   ?? c.bg;
+    const subtitle = det ? `${det.clients.length} client${det.clients.length !== 1 ? "s" : ""} · ${det.hoursWeek}h this week` : "Tap to send a message";
+    return (
+      <button onClick={() => setOpen({ type: "dm", id: name })}
+        className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:opacity-70"
+        style={{ borderBottom: i < len - 1 ? `1px solid ${c.line}` : "none" }}>
+        <div className="relative shrink-0">
+          <div className="grid place-items-center rounded-full font-display text-sm" style={{ width: 44, height: 44, background: member.color, color: "#fff", fontWeight: 800 }}>
+            {member.initials}
+          </div>
+          {unread && (
+            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2" style={{ background: c.accent, borderColor: c.surface }} />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm" style={{ fontWeight: unread ? 700 : 600 }}>{name}</span>
+            <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: roleBg, color: roleC, fontWeight: 700, fontSize: 10 }}>{member.role}</span>
+            {lastTime && <span className="ml-auto text-xs shrink-0" style={{ color: c.muted }}>{lastTime}</span>}
+          </div>
+          <div className="text-xs mt-0.5 truncate" style={{ color: unread ? c.ink : c.muted, fontWeight: unread ? 600 : 400 }}>
+            {lastMsg || <span style={{ fontStyle: "italic" }}>{subtitle}</span>}
+          </div>
+        </div>
+        <ChevronRight size={16} style={{ color: c.line, flexShrink: 0 }} />
+      </button>
+    );
+  };
 
   return (
     <div className="pb-28">
@@ -985,78 +1050,23 @@ function ChatScreen() {
       <div className="flex items-center justify-between mb-1">
         <div>
           <div className="font-display text-2xl" style={{ fontWeight: 800 }}>Messages</div>
-          <div className="text-xs mt-0.5" style={{ color: c.muted }}>Cayer Behavioral Group</div>
+          <div className="text-xs mt-0.5" style={{ color: c.muted }}>Cayer Behavioral Group · {contacts.length} contacts</div>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs" style={{ background: c.primarySoft, color: c.primary, fontWeight: 700 }}>
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.primary }} /> {Object.keys(TEAM_MEMBERS).length} online
         </div>
       </div>
 
-      {/* Channels section */}
-      <div className="mt-4 mb-1">
-        <SectionLabel>Channels</SectionLabel>
-      </div>
-      <div className="rounded-2xl overflow-hidden mb-4" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
-        {inbox.filter((r) => r.type === "channel").map((row, i, arr) => (
-          <button key={row.id} onClick={() => setOpen({ type: "channel", id: row.id })}
-            className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:opacity-70"
-            style={{ borderBottom: i < arr.length - 1 ? `1px solid ${c.line}` : "none" }}>
-            {/* Channel icon */}
-            <div className="grid place-items-center rounded-xl shrink-0 text-xl" style={{ width: 44, height: 44, background: c.primarySoft }}>
-              {row.icon}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm" style={{ fontWeight: 700 }}>#{row.name}</span>
-                <span className="text-xs shrink-0" style={{ color: c.muted }}>{row.lastTime}</span>
-              </div>
-              <div className="text-xs mt-0.5 truncate" style={{ color: c.muted }}>
-                {row.lastSender && <span style={{ fontWeight: 600, color: c.ink }}>{row.lastSender.split(" ")[0]}: </span>}
-                {row.lastMsg || row.description}
-              </div>
-            </div>
-            <ChevronRight size={16} style={{ color: c.line, flexShrink: 0 }} />
-          </button>
-        ))}
-      </div>
-
-      {/* DMs section */}
-      <div className="mb-1">
-        <SectionLabel>Direct messages</SectionLabel>
-      </div>
-      <div className="rounded-2xl overflow-hidden" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
-        {inbox.filter((r) => r.type === "dm").map((row, i, arr) => {
-          const m = row.member;
-          const roleC = ROLE_COLOR[m.role] ?? c.muted;
-          const roleBg = ROLE_BG[m.role] ?? c.bg;
-          return (
-            <button key={row.id} onClick={() => setOpen({ type: "dm", id: row.id })}
-              className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:opacity-70"
-              style={{ borderBottom: i < arr.length - 1 ? `1px solid ${c.line}` : "none" }}>
-              {/* Avatar */}
-              <div className="relative shrink-0">
-                <div className="grid place-items-center rounded-full font-display text-sm" style={{ width: 44, height: 44, background: m.color, color: "#fff", fontWeight: 800 }}>
-                  {m.initials}
-                </div>
-                {row.unread && (
-                  <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2" style={{ background: c.accent, borderColor: c.surface }} />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm" style={{ fontWeight: row.unread ? 700 : 600 }}>{row.name}</span>
-                  <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: roleBg, color: roleC, fontWeight: 700, fontSize: 10 }}>{m.role}</span>
-                  <span className="ml-auto text-xs shrink-0" style={{ color: c.muted }}>{row.lastTime}</span>
-                </div>
-                <div className="text-xs mt-0.5 truncate" style={{ color: row.unread ? c.ink : c.muted, fontWeight: row.unread ? 600 : 400 }}>
-                  {row.lastMsg || <span style={{ fontStyle: "italic" }}>No messages yet — say hi!</span>}
-                </div>
-              </div>
-              <ChevronRight size={16} style={{ color: c.line, flexShrink: 0 }} />
-            </button>
-          );
-        })}
-      </div>
+      {groups.map((g) => (
+        <div key={g.title} className="mt-4">
+          <div className="mb-1"><SectionLabel>{g.title}</SectionLabel></div>
+          <div className="rounded-2xl overflow-hidden" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
+            {g.rows.map(([name, member], i) => (
+              <ContactRow key={name} name={name} member={member} i={i} len={g.rows.length} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1388,7 +1398,10 @@ function LiveSession({ client, onExit }) {
   const startVoice = () => {
     setVoiceText(""); setVoiceError("");
     setVoicePhase("listening");
-    dict.start((t) => setVoiceText(t));
+    dict.start(
+      (t) => setVoiceText(t),
+      (err) => { setVoiceError(err); setVoicePhase("stopped"); }
+    );
   };
   const stopVoice   = () => { dict.stop(); setVoicePhase("stopped"); };
   const dismissVoice = () => { dict.stop(); setVoicePhase(null); setVoiceText(""); setVoiceError(""); };
@@ -1455,12 +1468,8 @@ function LiveSession({ client, onExit }) {
         {tab === "ai"        && <AINotesPage   client={client} programs={programs} behaviors={behaviors} abc={abc} notes={notes} onAddNote={addNote} />}
       </div>
 
-      {/* Pulsating orange border — alive while voice is active */}
-      {voicePhase && (
-        <div className="fixed inset-0 pointer-events-none z-30"
-          style={{ border: "6px solid #F97316", animation: "bh-glow-pulse 1.4s ease-in-out infinite",
-            boxShadow: "0 0 0 6px #F97316, 0 0 50px 16px rgba(249,115,22,0.5)", borderRadius: 0 }} />
-      )}
+      {/* Cowork-style loading bubble border — alive while voice is active */}
+      {voicePhase && <div className="bh-cowork-border" />}
 
       {/* Voice card — text box + Stop + Submit only */}
       {voicePhase && voicePhase !== "busy" && (
@@ -1547,7 +1556,7 @@ function GlobalAIButton({ navTab, client }) {
       return `The clinician is on the Schedule screen. Today's sessions: ${todaySessions.join(", ") || "none"}. They have ${CLIENTS.length} active clients: ${CLIENTS.map((c) => c.name).join(", ")}.`;
     }
     if (navTab === "clients") return `The clinician is on the Clients screen. Active clients: ${CLIENTS.map((cl) => `${cl.name} (age ${cl.age}, ${cl.programs} programs)`).join("; ")}.`;
-    if (navTab === "chat") return `The clinician is on the Team Chat screen. Team members: ${Object.entries(TEAM_MEMBERS).map(([n, m]) => `${n} (${m.role})`).join(", ")}.`;
+    if (navTab === "messages") return `The clinician is on the Messages screen — a contacts directory for messaging the team. Team members: ${Object.entries(TEAM_MEMBERS).map(([n, m]) => `${n} (${m.role})`).join(", ")}.`;
     return "The clinician is using Behavior Hub, an ABA data collection app.";
   };
 
@@ -1569,7 +1578,7 @@ Clinician's request: "${q}"`));
 
   const handleVoice = () => {
     if (dict.listening) { dict.stop(); ask(text); }
-    else { setText(""); setReply(""); dict.start((t) => setText(t)); }
+    else { setText(""); setReply(""); setError(""); dict.start((t) => setText(t), (err) => setError(err)); }
   };
 
   if (!open) return (
@@ -1588,7 +1597,7 @@ Clinician's request: "${q}"`));
             <Sparkles size={16} style={{ color: c.primary }} />
             <span className="text-sm" style={{ color: "#fff", fontWeight: 700 }}>AI Assistant</span>
             <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(14,159,143,0.2)", color: c.primary, fontWeight: 600 }}>
-              {client ? client.name : navTab === "schedule" ? "Schedule" : navTab === "clients" ? "Clients" : "Team"}
+              {client ? client.name : navTab === "schedule" ? "Schedule" : navTab === "clients" ? "Clients" : "Messages"}
             </span>
           </div>
           <button onClick={() => { setOpen(false); dict.stop(); setText(""); setReply(""); setError(""); }} style={{ color: "#666" }}><X size={18} /></button>
@@ -2023,182 +2032,6 @@ function Recap({ label, value }) {
 function EmptyState({ icon: Icon, message }) {
   return <div className="flex flex-col items-center text-center py-10 gap-3" style={{ color: c.muted }}><Icon size={32} style={{ opacity: 0.3 }} /><p className="text-sm">{message}</p></div>;
 }
-// ---- Staff Screen ----------------
-function StaffScreen({ onOpenClient }) {
-  const [selected, setSelected] = useState(null);
-  const bcbas = Object.entries(TEAM_MEMBERS).filter(([, m]) => m.role === "BCBA");
-  const rbts   = Object.entries(TEAM_MEMBERS).filter(([, m]) => m.role === "RBT");
-  const others = Object.entries(TEAM_MEMBERS).filter(([, m]) => !["BCBA","RBT"].includes(m.role));
-
-  if (selected) {
-    return <StaffDetail name={selected} onBack={() => setSelected(null)} onOpenClient={onOpenClient} />;
-  }
-
-  const StaffGroup = ({ title, members }) => (
-    <div className="mb-5">
-      <SectionLabel>{title}</SectionLabel>
-      <div className="grid gap-2.5">
-        {members.map(([name, member]) => {
-          const det   = STAFF_DETAILS[name] ?? { clients: [], hoursWeek: 0 };
-          const days  = det.certExp ? certDaysLeft(det.certExp) : null;
-          const warn  = days !== null && days < 90;
-          const roleC = ROLE_COLOR[member.role] ?? c.muted;
-          const roleBg= ROLE_BG[member.role]   ?? c.bg;
-          return (
-            <button key={name} onClick={() => setSelected(name)}
-              className="flex items-center gap-3 p-4 rounded-2xl text-left transition-transform active:scale-[0.99]"
-              style={{ background: c.surface, border: `1px solid ${warn ? c.accent + "55" : c.line}`, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-              <div className="grid place-items-center rounded-full font-display shrink-0"
-                style={{ width: 48, height: 48, background: member.color, color: "#fff", fontWeight: 800, fontSize: 15 }}>
-                {member.initials}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-display text-base" style={{ fontWeight: 700 }}>{name}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: roleBg, color: roleC, fontWeight: 700 }}>{member.role}</span>
-                  {warn && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: c.accentSoft, color: c.accent, fontWeight: 700 }}>Cert {days}d</span>}
-                </div>
-                <div className="text-xs mt-0.5" style={{ color: c.muted }}>
-                  {det.clients.length} client{det.clients.length !== 1 ? "s" : ""} · {det.hoursWeek}h this week
-                  {det.supervisionHours ? ` · ${det.supervisionHours}h supervision` : ""}
-                </div>
-              </div>
-              <ChevronRight size={18} style={{ color: c.muted }} />
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="pb-28">
-      <div className="mb-5">
-        <div className="font-display text-2xl" style={{ fontWeight: 800 }}>Team</div>
-        <div className="text-xs mt-0.5" style={{ color: c.muted }}>Cayer Behavioral Group · {Object.keys(TEAM_MEMBERS).length} members</div>
-      </div>
-
-      {/* Summary bar */}
-      <div className="grid grid-cols-3 gap-2 mb-5">
-        {[
-          { label: "BCBAs", value: bcbas.length },
-          { label: "RBTs", value: rbts.length },
-          { label: "Total hrs/wk", value: Object.values(STAFF_DETAILS).reduce((s, d) => s + (d.hoursWeek || 0), 0) },
-        ].map(({ label, value }) => (
-          <div key={label} className="p-3 rounded-2xl text-center" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
-            <div className="font-display text-xl" style={{ fontWeight: 800 }}>{value}</div>
-            <div className="text-xs" style={{ color: c.muted }}>{label}</div>
-          </div>
-        ))}
-      </div>
-
-      <StaffGroup title="BCBAs" members={bcbas} />
-      <StaffGroup title="RBTs" members={rbts} />
-      <StaffGroup title="Other specialists" members={others} />
-    </div>
-  );
-}
-
-// ---- Staff Detail ----
-function StaffDetail({ name, onBack, onOpenClient }) {
-  const member = TEAM_MEMBERS[name] ?? { color: c.muted, initials: name[0], role: "" };
-  const det    = STAFF_DETAILS[name] ?? { clients: [], hoursWeek: 0, certExp: null };
-  const clientList = CLIENTS.filter((cl) => det.clients.includes(cl.id));
-  const roleC  = ROLE_COLOR[member.role] ?? c.muted;
-  const roleBg = ROLE_BG[member.role]   ?? c.bg;
-  const days   = det.certExp ? certDaysLeft(det.certExp) : null;
-  const thisWeekSessions = SCHEDULE.filter((s) => det.clients.includes(s.clientId) && s.status === "upcoming").slice(0, 5);
-
-  return (
-    <div className="pb-28">
-      <BackBar onBack={onBack} label="Team" />
-
-      {/* Profile */}
-      <div className="flex items-center gap-4 mt-4 mb-5">
-        <div className="grid place-items-center rounded-full font-display"
-          style={{ width: 64, height: 64, background: member.color, color: "#fff", fontWeight: 800, fontSize: 20 }}>
-          {member.initials}
-        </div>
-        <div>
-          <div className="font-display text-2xl" style={{ fontWeight: 800 }}>{name}</div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: roleBg, color: roleC, fontWeight: 700 }}>{member.role}</span>
-            {days !== null && (
-              <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: days < 90 ? c.accentSoft : c.primarySoft, color: days < 90 ? c.accent : c.primary, fontWeight: 700 }}>
-                Cert expires {days}d
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        {[
-          { label: "Hrs / wk", value: det.hoursWeek },
-          { label: "Clients", value: det.clients.length },
-          { label: "Supervision hrs", value: det.supervisionHours ?? "N/A" },
-        ].map(({ label, value }) => (
-          <div key={label} className="p-3 rounded-2xl text-center" style={{ background: c.surface, border: `1px solid ${c.line}` }}>
-            <div className="font-display text-xl" style={{ fontWeight: 800 }}>{value}</div>
-            <div className="text-xs" style={{ color: c.muted }}>{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Assigned clients */}
-      <Card>
-        <Label icon={Users}>Assigned clients</Label>
-        {clientList.length === 0
-          ? <p className="text-sm mt-3" style={{ color: c.muted }}>No clients assigned.</p>
-          : <div className="grid gap-2 mt-3">
-              {clientList.map((cl) => (
-                <button key={cl.id} onClick={() => onOpenClient(cl, "staff")}
-                  className="flex items-center gap-3 p-3 rounded-xl text-left active:opacity-70"
-                  style={{ background: c.bg, border: `1px solid ${c.line}` }}>
-                  <div className="grid place-items-center rounded-xl font-display shrink-0"
-                    style={{ width: 36, height: 36, background: cl.color, color: "#fff", fontWeight: 800, fontSize: 13 }}>
-                    {cl.name.split(" ").map((w) => w[0]).join("")}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm" style={{ fontWeight: 600 }}>{cl.name}</div>
-                    <div className="text-xs" style={{ color: c.muted }}>Age {cl.age} · {cl.programs} programs</div>
-                  </div>
-                  <ChevronRight size={15} style={{ color: c.muted }} />
-                </button>
-              ))}
-            </div>}
-      </Card>
-
-      {/* Upcoming sessions */}
-      {thisWeekSessions.length > 0 && (
-        <div className="mt-4">
-          <Card>
-            <Label icon={Calendar}>Upcoming sessions</Label>
-            <div className="grid gap-2 mt-3">
-              {thisWeekSessions.map((s) => {
-                const cl = CLIENTS.find((c) => c.id === s.clientId);
-                return (
-                  <div key={s.id} className="flex items-center gap-3 p-2.5 rounded-xl" style={{ background: c.bg }}>
-                    <div className="grid place-items-center rounded-lg font-display shrink-0"
-                      style={{ width: 32, height: 32, background: cl?.color ?? c.muted, color: "#fff", fontWeight: 800, fontSize: 11 }}>
-                      {cl?.name.split(" ").map((w) => w[0]).join("")}
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm" style={{ fontWeight: 600 }}>{cl?.name}</div>
-                      <div className="text-xs" style={{ color: c.muted }}>{formatDayHeader(s.date)} · {s.startTime}–{s.endTime}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ---- Add Session Modal ----
 function AddSessionModal({ onClose, onAdd }) {
   const today = new Date().toISOString().split("T")[0];

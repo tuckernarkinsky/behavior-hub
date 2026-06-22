@@ -374,6 +374,16 @@ function useReceiveBroadcast() {
 }
 
 // ---------------- Speech ----------------
+function isIOS() {
+  if (typeof navigator === "undefined") return false;
+  return /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); // iPadOS reports as Mac
+}
+function isStandalonePWA() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
+}
+
 function useDictation() {
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(true);
@@ -383,16 +393,24 @@ function useDictation() {
     const SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
     if (!SR) {
       setSupported(false);
-      onError?.("Voice input isn't supported in this browser. Try Chrome (or type your note instead).");
+      onError?.(isIOS()
+        ? "Voice input isn't available in this browser. On iPhone, open the site in Safari (not Chrome). You can also tap the 🎤 on your keyboard to dictate into the box."
+        : "Voice input isn't supported in this browser. Try Chrome, or type your note instead.");
       return;
     }
     if (typeof window !== "undefined" && !window.isSecureContext) {
       onError?.("Voice input needs a secure (https) connection.");
       return;
     }
+    // Speech recognition is blocked inside an iOS home-screen app — most common cause of "blocked" with mic allowed.
+    if (isIOS() && isStandalonePWA()) {
+      onError?.("Voice input is blocked when the app runs from your Home Screen. Open behavior-hub.vercel.app in Safari instead — or tap the 🎤 on your keyboard to dictate into the box.");
+      return;
+    }
     try {
       const rec = new SR();
-      rec.continuous = true; rec.interimResults = true; rec.lang = "en-US";
+      // iOS Safari throws/aborts immediately with continuous mode — use single-utterance there.
+      rec.continuous = !isIOS(); rec.interimResults = true; rec.lang = "en-US";
       finalRef.current = "";
       rec.onresult = (e) => {
         let interim = "";
@@ -408,7 +426,9 @@ function useDictation() {
         if (err === "no-speech" || err === "aborted") return; // transient — ignore
         setListening(false);
         if (err === "not-allowed" || err === "service-not-allowed")
-          onError?.("Microphone access is blocked. Allow mic access in your browser settings, then try again.");
+          onError?.(isIOS()
+            ? "Voice input was refused by iOS. Turn on Settings → General → Keyboard → Enable Dictation, use Safari (not a Home Screen app), then try again. Or tap the 🎤 on your keyboard to dictate into the box."
+            : "Microphone access is blocked. Allow mic access for this site in your browser settings, then try again.");
         else if (err === "audio-capture")
           onError?.("No microphone found. Check your device's mic and try again.");
         else if (err === "network")

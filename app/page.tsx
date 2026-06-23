@@ -805,7 +805,7 @@ function ScheduleScreen({ schedule, clients, currentUser, onStartSession, onView
           <div>
             <div className="text-sm mb-0.5" style={{ opacity: 0.8 }}>{greet}</div>
             <div className="font-display text-2xl" style={{ fontWeight: 800 }}>{currentUser?.name ?? "Tucker Narkinsky"}</div>
-            <div className="text-sm mt-0.5" style={{ opacity: 0.75 }}>{currentUser?.role ?? "RBT"}{currentUser?.organization ? ` · ${currentUser.organization}` : ""}</div>
+            <div className="text-sm mt-0.5" style={{ opacity: 0.75 }}>{currentUser?.role ?? "RBT"} · ID {((currentUser?.id || currentUser?.email || "").replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase()) || "------"}</div>
           </div>
           <div className="flex flex-col items-end gap-1.5">
             <button onClick={onLogout} className="px-2.5 py-1 rounded-lg text-xs" style={{ background: "rgba(255,255,255,0.18)", color: "#fff", fontWeight: 600 }}>Sign out</button>

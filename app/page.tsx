@@ -374,76 +374,77 @@ function useReceiveBroadcast() {
 }
 
 // ---------------- Speech ----------------
-function isIOS() {
-  if (typeof navigator === "undefined") return false;
-  return /iP(hone|ad|od)/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); // iPadOS reports as Mac
-}
-function isStandalonePWA() {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
-}
-
-function useDictation() {
-  const [listening, setListening] = useState(false);
-  const [supported, setSupported] = useState(true);
-  const recRef = useRef(null);
-  const finalRef = useRef("");
-  const start = (onText, onError) => {
-    const SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
-    if (!SR) {
-      setSupported(false);
-      onError?.(isIOS()
-        ? "Voice input isn't available in this browser. On iPhone, open the site in Safari (not Chrome). You can also tap the 🎤 on your keyboard to dictate into the box."
-        : "Voice input isn't supported in this browser. Try Chrome, or type your note instead.");
-      return;
-    }
-    if (typeof window !== "undefined" && !window.isSecureContext) {
-      onError?.("Voice input needs a secure (https) connection.");
-      return;
-    }
-    // Speech recognition is blocked inside an iOS home-screen app — most common cause of "blocked" with mic allowed.
-    if (isIOS() && isStandalonePWA()) {
-      onError?.("Voice input is blocked when the app runs from your Home Screen. Open behavior-hub.vercel.app in Safari instead — or tap the 🎤 on your keyboard to dictate into the box.");
-      return;
+// Audio recorder → server-side transcription. Reliable on every platform incl. iOS Safari.
+function useRecorder() {
+  const [recording, setRecording] = useState(false);
+  const mrRef = useRef(null);
+  const chunksRef = useRef([]);
+  const streamRef = useRef(null);
+  const start = async (onError) => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      onError?.("Recording isn't supported in this browser. Type your note instead.");
+      return false;
     }
     try {
-      const rec = new SR();
-      // iOS Safari throws/aborts immediately with continuous mode — use single-utterance there.
-      rec.continuous = !isIOS(); rec.interimResults = true; rec.lang = "en-US";
-      finalRef.current = "";
-      rec.onresult = (e) => {
-        let interim = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const r = e.results[i];
-          if (r.isFinal) finalRef.current += r[0].transcript + " ";
-          else interim += r[0].transcript;
-        }
-        onText((finalRef.current + interim).trim());
-      };
-      rec.onerror = (e) => {
-        const err = e?.error;
-        if (err === "no-speech" || err === "aborted") return; // transient — ignore
-        setListening(false);
-        if (err === "not-allowed" || err === "service-not-allowed")
-          onError?.(isIOS()
-            ? "Voice input was refused by iOS. Turn on Settings → General → Keyboard → Enable Dictation, use Safari (not a Home Screen app), then try again. Or tap the 🎤 on your keyboard to dictate into the box."
-            : "Microphone access is blocked. Allow mic access for this site in your browser settings, then try again.");
-        else if (err === "audio-capture")
-          onError?.("No microphone found. Check your device's mic and try again.");
-        else if (err === "network")
-          onError?.("Couldn't reach the voice service. Check your connection and try again.");
-        else onError?.("Voice input stopped unexpectedly. Please try again, or type your note.");
-      };
-      rec.onend = () => setListening(false);
-      recRef.current = rec; rec.start(); setListening(true);
-    } catch {
-      setListening(false);
-      onError?.("Couldn't start voice input. Please type your note instead.");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const mime = typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.("audio/webm")
+        ? "audio/webm"
+        : (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.("audio/mp4")) ? "audio/mp4" : "";
+      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
+      mrRef.current = mr;
+      mr.start();
+      setRecording(true);
+      return true;
+    } catch (e) {
+      const name = e?.name;
+      if (name === "NotAllowedError" || name === "SecurityError")
+        onError?.("Microphone access was blocked. Allow mic access for this site, then try again.");
+      else if (name === "NotFoundError")
+        onError?.("No microphone found on this device.");
+      else onError?.("Couldn't start recording. Please try again, or type your note.");
+      setRecording(false);
+      return false;
     }
   };
-  const stop = () => { try { recRef.current?.stop(); } catch {} setListening(false); };
-  return { listening, supported, start, stop };
+  const stop = () => new Promise((resolve) => {
+    const mr = mrRef.current;
+    if (!mr || mr.state === "inactive") { setRecording(false); resolve(null); return; }
+    mr.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+      try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch {}
+      setRecording(false);
+      resolve(blob);
+    };
+    try { mr.stop(); } catch { setRecording(false); resolve(null); }
+  });
+  const cancel = () => {
+    try { if (mrRef.current && mrRef.current.state !== "inactive") mrRef.current.stop(); } catch {}
+    try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch {}
+    setRecording(false);
+  };
+  return { recording, start, stop, cancel };
+}
+
+async function transcribeAudio(blob) {
+  const ext = blob.type.includes("mp4") || blob.type.includes("m4a") ? "mp4"
+    : blob.type.includes("ogg") ? "ogg" : "webm";
+  const fd = new FormData();
+  fd.append("audio", blob, `recording.${ext}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 55000);
+  try {
+    const res = await fetch("/api/transcribe", { method: "POST", body: fd, signal: controller.signal });
+    let data = {}; try { data = await res.json(); } catch {}
+    if (!res.ok) throw new Error(data.error || "Couldn't transcribe the audio.");
+    return data.text || "";
+  } catch (e) {
+    if (e?.name === "AbortError") throw new Error("Transcription took too long. Please try again.");
+    if (e instanceof TypeError) throw new Error("Couldn't reach the server. Check your connection and try again.");
+    throw e;
+  } finally { clearTimeout(timer); }
 }
 
 // ---------------- AI ----------------
@@ -804,7 +805,7 @@ function ScheduleScreen({ schedule, clients, currentUser, onStartSession, onView
           <div>
             <div className="text-sm mb-0.5" style={{ opacity: 0.8 }}>{greet}</div>
             <div className="font-display text-2xl" style={{ fontWeight: 800 }}>{currentUser?.name ?? "Tucker Narkinsky"}</div>
-            <div className="text-sm mt-0.5" style={{ opacity: 0.75 }}>{currentUser?.role ?? "RBT"} · Cayer Behavioral Group</div>
+            <div className="text-sm mt-0.5" style={{ opacity: 0.75 }}>{currentUser?.role ?? "RBT"}{currentUser?.organization ? ` · ${currentUser.organization}` : ""}</div>
           </div>
           <div className="flex flex-col items-end gap-1.5">
             <button onClick={onLogout} className="px-2.5 py-1 rounded-lg text-xs" style={{ background: "rgba(255,255,255,0.18)", color: "#fff", fontWeight: 600 }}>Sign out</button>
@@ -1070,7 +1071,7 @@ function ChatScreen() {
       <div className="flex items-center justify-between mb-1">
         <div>
           <div className="font-display text-2xl" style={{ fontWeight: 800 }}>Messages</div>
-          <div className="text-xs mt-0.5" style={{ color: c.muted }}>Cayer Behavioral Group · {contacts.length} contacts</div>
+          <div className="text-xs mt-0.5" style={{ color: c.muted }}>{contacts.length} contacts</div>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs" style={{ background: c.primarySoft, color: c.primary, fontWeight: 700 }}>
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.primary }} /> {Object.keys(TEAM_MEMBERS).length} online
@@ -1409,22 +1410,34 @@ function LiveSession({ client, onExit }) {
   const [ending, setEnding]     = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
 
-  // Siri-style inline voice entry
-  const [voicePhase, setVoicePhase] = useState(null); // null | "listening" | "stopped" | "busy"
+  // Inline voice entry — record audio, transcribe server-side (works on every platform incl. iPhone)
+  const [voicePhase, setVoicePhase] = useState(null); // null | "recording" | "transcribing" | "stopped" | "busy"
   const [voiceText, setVoiceText]   = useState("");
   const [voiceError, setVoiceError] = useState("");
-  const dict = useDictation();
+  const voiceRef = useRef(null);
+  const rec = useRecorder();
 
-  const startVoice = () => {
+  const startVoice = async () => {
     setVoiceText(""); setVoiceError("");
-    setVoicePhase("listening");
-    dict.start(
-      (t) => setVoiceText(t),
-      (err) => { setVoiceError(err); setVoicePhase("stopped"); }
-    );
+    setVoicePhase("recording");
+    const ok = await rec.start((err) => { setVoiceError(err); setVoicePhase("stopped"); });
+    if (!ok) setVoicePhase("stopped");
   };
-  const stopVoice   = () => { dict.stop(); setVoicePhase("stopped"); };
-  const dismissVoice = () => { dict.stop(); setVoicePhase(null); setVoiceText(""); setVoiceError(""); };
+  const stopVoice = async () => {
+    setVoicePhase("transcribing");
+    try {
+      const blob = await rec.stop();
+      if (!blob || blob.size < 800) { setVoiceError("Didn't catch any audio — tap the mic and try again."); setVoicePhase("stopped"); return; }
+      const t = await transcribeAudio(blob);
+      setVoiceText(t);
+      setVoicePhase("stopped");
+      if (!t) setVoiceError("Didn't catch that — try again, or type your note.");
+    } catch (e) {
+      setVoiceError(e instanceof Error ? e.message : "Couldn't transcribe the audio.");
+      setVoicePhase("stopped");
+    }
+  };
+  const dismissVoice = () => { rec.cancel(); setVoicePhase(null); setVoiceText(""); setVoiceError(""); };
 
   useEffect(() => { const t = setInterval(() => setSecs((s) => s + 1), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { saveSession(client.id, { programs, behaviors, abc, notes, secs }); }, [programs, behaviors, abc, notes, secs]);
@@ -1488,40 +1501,42 @@ function LiveSession({ client, onExit }) {
         {tab === "ai"        && <AINotesPage   client={client} programs={programs} behaviors={behaviors} abc={abc} notes={notes} onAddNote={addNote} />}
       </div>
 
-      {/* Cowork-style loading bubble border — alive while voice is active */}
-      {voicePhase && <div className="bh-cowork-border" />}
+      {/* Cowork-style loading bubble border — alive while recording or transcribing */}
+      {(voicePhase === "recording" || voicePhase === "transcribing") && <div className="bh-cowork-border" />}
 
-      {/* Voice card — text box + Stop + Submit only */}
-      {voicePhase && voicePhase !== "busy" && (
+      {/* Voice card — record → transcribe → review → submit */}
+      {(voicePhase === "recording" || voicePhase === "stopped") && (
         <div className="fixed bottom-24 left-4 right-4 z-40 rounded-2xl p-4"
           style={{ background: "rgba(20,38,34,0.97)", backdropFilter: "blur(14px)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full" style={{ background: voicePhase === "listening" ? "#F97316" : "#555", animation: voicePhase === "listening" ? "bh-mic-ring 1.4s ease-in-out infinite" : "none" }} />
-              <span className="text-xs" style={{ color: voicePhase === "listening" ? "#F97316" : "#888", fontWeight: 700 }}>
-                {voicePhase === "listening" ? "Listening…" : "Done — tap Submit"}
+              <span className="w-2 h-2 rounded-full" style={{ background: voicePhase === "recording" ? "#F97316" : "#555", animation: voicePhase === "recording" ? "bh-mic-ring 1.4s ease-in-out infinite" : "none" }} />
+              <span className="text-xs" style={{ color: voicePhase === "recording" ? "#F97316" : "#888", fontWeight: 700 }}>
+                {voicePhase === "recording" ? "Recording… tap Stop when done" : "Review & submit"}
               </span>
             </div>
             <button onClick={dismissVoice} style={{ color: "#666" }}><X size={16} /></button>
           </div>
 
-          <textarea readOnly={voicePhase === "listening"} value={voiceText}
-            onChange={(e) => setVoiceText(e.target.value)}
-            rows={3} placeholder="Speak naturally — programs, prompts, behaviors…"
-            className="w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none"
-            style={{ background: "rgba(255,255,255,0.06)", border: `1px solid ${voicePhase === "listening" ? "#F97316" : "rgba(255,255,255,0.12)"}`, color: "#fff" }} />
+          {voicePhase === "stopped" && (
+            <textarea ref={voiceRef} value={voiceText}
+              onChange={(e) => setVoiceText(e.target.value)}
+              rows={3} placeholder="Transcript will appear here — or type your note…"
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff" }} />
+          )}
 
           {voiceError && <p className="text-xs mt-2" style={{ color: "#F97316" }}>{voiceError}</p>}
 
           <div className="flex gap-2 mt-3">
-            {voicePhase === "listening"
+            {voicePhase === "recording"
               ? <button onClick={stopVoice} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm"
                   style={{ background: "#F97316", color: "#fff", fontWeight: 700 }}>
                   <MicOff size={15} /> Stop
                 </button>
               : <>
                   <button onClick={startVoice} className="grid place-items-center rounded-xl shrink-0"
-                    style={{ width: 44, height: 44, background: "rgba(255,255,255,0.08)", color: "#aaa" }}>
+                    style={{ width: 44, height: 44, background: "rgba(255,255,255,0.08)", color: "#aaa" }} title="Record again">
                     <Mic size={17} />
                   </button>
                   <button onClick={async () => { setVoicePhase("busy"); try { const p = await parseVoiceEntry(voiceText, programs, behaviors); applyVoiceEntry(p); dismissVoice(); } catch (e) { setVoiceError(e instanceof Error ? e.message : "Couldn't reach AI."); setVoicePhase("stopped"); } }}
@@ -1535,12 +1550,12 @@ function LiveSession({ client, onExit }) {
         </div>
       )}
 
-      {/* Busy submitting */}
-      {voicePhase === "busy" && (
+      {/* Transcribing / submitting spinners */}
+      {(voicePhase === "transcribing" || voicePhase === "busy") && (
         <div className="fixed bottom-24 left-4 right-4 z-40 rounded-2xl p-4 flex items-center gap-3"
           style={{ background: "rgba(20,38,34,0.97)", backdropFilter: "blur(14px)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
           <Loader2 size={18} className="animate-spin" style={{ color: c.primary }} />
-          <span className="text-sm" style={{ color: "#fff", fontWeight: 600 }}>Submitting…</span>
+          <span className="text-sm" style={{ color: "#fff", fontWeight: 600 }}>{voicePhase === "transcribing" ? "Transcribing…" : "Submitting…"}</span>
         </div>
       )}
 
@@ -1566,7 +1581,9 @@ function GlobalAIButton({ navTab, client }) {
   const [reply, setReply]   = useState("");
   const [busy, setBusy]     = useState(false);
   const [error, setError]   = useState("");
-  const dict = useDictation();
+  const aiInputRef = useRef(null);
+  const [vBusy, setVBusy] = useState(false);
+  const rec = useRecorder();
 
   const context = () => {
     if (client) return `The clinician is viewing the client hub for ${client.name}, age ${client.age}. Past session data: ${JSON.stringify(PAST_SESSIONS[client.id] ?? [])}. Documents: ${JSON.stringify(DOCUMENTS[client.id] ?? [])}. Protocols: ${JSON.stringify(PROTOCOLS[client.id] ?? [])}.`;
@@ -1596,9 +1613,19 @@ Clinician's request: "${q}"`));
     finally { setBusy(false); }
   };
 
-  const handleVoice = () => {
-    if (dict.listening) { dict.stop(); ask(text); }
-    else { setText(""); setReply(""); setError(""); dict.start((t) => setText(t), (err) => setError(err)); }
+  const handleVoice = async () => {
+    if (rec.recording) {
+      setVBusy(true);
+      try {
+        const blob = await rec.stop();
+        if (!blob || blob.size < 800) { setError("Didn't catch any audio — try again."); }
+        else { const t = await transcribeAudio(blob); setText((prev) => (prev ? prev + " " : "") + t); }
+      } catch (e) { setError(e instanceof Error ? e.message : "Couldn't transcribe the audio."); }
+      finally { setVBusy(false); }
+      return;
+    }
+    setError(""); setReply("");
+    await rec.start((err) => setError(err));
   };
 
   if (!open) return (
@@ -1620,7 +1647,7 @@ Clinician's request: "${q}"`));
               {client ? client.name : navTab === "schedule" ? "Schedule" : navTab === "clients" ? "Clients" : "Messages"}
             </span>
           </div>
-          <button onClick={() => { setOpen(false); dict.stop(); setText(""); setReply(""); setError(""); }} style={{ color: "#666" }}><X size={18} /></button>
+          <button onClick={() => { setOpen(false); rec.cancel(); setText(""); setReply(""); setError(""); }} style={{ color: "#666" }}><X size={18} /></button>
         </div>
 
         {/* Suggestions */}
@@ -1650,14 +1677,14 @@ Clinician's request: "${q}"`));
 
         {/* Input */}
         <div className="flex gap-2 px-4 pb-4 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-          <input value={text} onChange={(e) => setText(e.target.value)}
+          <input ref={aiInputRef} value={text} onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } }}
             placeholder="Ask anything — session prep, ABA terms, draft a message…"
             className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none"
             style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff" }} />
-          <button onClick={handleVoice} className={`grid place-items-center rounded-xl shrink-0 ${dict.listening ? "bh-mic-pulse" : ""}`}
-            style={{ width: 40, height: 40, background: dict.listening ? "#F97316" : "rgba(255,255,255,0.1)", color: "#fff" }}>
-            {dict.listening ? <MicOff size={16} /> : <Mic size={16} />}
+          <button onClick={handleVoice} disabled={vBusy} className={`grid place-items-center rounded-xl shrink-0 ${rec.recording ? "bh-mic-pulse" : ""}`}
+            style={{ width: 40, height: 40, background: rec.recording ? "#F97316" : "rgba(255,255,255,0.1)", color: "#fff" }}>
+            {vBusy ? <Loader2 size={16} className="animate-spin" /> : rec.recording ? <MicOff size={16} /> : <Mic size={16} />}
           </button>
           <button onClick={() => ask()} disabled={busy || !text.trim()} className="grid place-items-center rounded-xl shrink-0 active:scale-95"
             style={{ width: 40, height: 40, background: text.trim() ? c.primary : "rgba(255,255,255,0.08)", color: "#fff" }}>
@@ -1824,7 +1851,21 @@ function AINotesPage({ client, programs, behaviors, abc, notes, onAddNote }) {
   const [summary, setSummary] = useState("");
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState("");
-  const dict = useDictation();
+  const [vBusy, setVBusy]     = useState(false);
+  const rec = useRecorder();
+  const dictate = async () => {
+    if (rec.recording) {
+      setVBusy(true);
+      try {
+        const blob = await rec.stop();
+        if (blob && blob.size > 800) { const t = await transcribeAudio(blob); setDraft((d) => (d ? d + " " : "") + t); }
+        else setError("Didn't catch any audio — try again.");
+      } catch (e) { setError(e instanceof Error ? e.message : "Couldn't transcribe the audio."); }
+      finally { setVBusy(false); }
+      return;
+    }
+    setError(""); await rec.start((err) => setError(err));
+  };
   const hasData = programs.some((p) => p.trials.length) || behaviors.some((b) => b.count) || abc.length > 0 || notes.length > 0;
 
   const dataContext = () => {
@@ -1847,11 +1888,12 @@ function AINotesPage({ client, programs, behaviors, abc, notes, onAddNote }) {
       <Card accent>
         <div className="flex items-center justify-between">
           <Label icon={Brain}>Quick note</Label>
-          {!dict.listening
-            ? <button onClick={() => dict.start(setDraft)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs" style={{ background: c.accent, color: "#fff", fontWeight: 600 }}><Mic size={13} /> Dictate</button>
-            : <button onClick={dict.stop} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs" style={{ background: c.ink, color: "#fff", fontWeight: 600 }}><MicOff size={13} /> Stop</button>}
+          {vBusy
+            ? <button disabled className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs" style={{ background: c.ink, color: "#fff", fontWeight: 600, opacity: 0.7 }}><Loader2 size={13} className="animate-spin" /> Transcribing…</button>
+            : !rec.recording
+              ? <button onClick={dictate} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs" style={{ background: c.accent, color: "#fff", fontWeight: 600 }}><Mic size={13} /> Dictate</button>
+              : <button onClick={dictate} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bh-mic-pulse" style={{ background: c.ink, color: "#fff", fontWeight: 600 }}><MicOff size={13} /> Stop</button>}
         </div>
-        {!dict.supported && <div className="text-xs mt-2" style={{ color: c.accent }}>Mic unavailable — type your note instead.</div>}
         <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder="e.g. Jordan needed two extra prompts on imitation but stayed regulated after the break mand…"
           className="w-full mt-2 p-2.5 rounded-xl text-sm outline-none resize-none" style={{ background: c.bg, border: `1px solid ${c.line}` }} />
         <button onClick={() => { if (draft.trim()) { onAddNote(draft.trim()); setDraft(""); } }} className="w-full mt-2 py-2 rounded-xl text-sm" style={{ background: c.primary, color: "#fff", fontWeight: 600 }}>Add note to session</button>
@@ -2747,7 +2789,7 @@ function OnboardingScreen({ user, onComplete }) {
         </div>
 
         <div className="text-xs mb-1.5 font-display" style={{ color: c.muted, fontWeight: 700 }}>CLINIC / ORGANIZATION <span style={{ color: c.muted, fontWeight: 400 }}>(optional)</span></div>
-        <input type="text" placeholder="e.g. Cayer Behavioral Group" value={orgName}
+        <input type="text" placeholder="e.g. Your organization" value={orgName}
           onChange={(e) => setOrgName(e.target.value)} style={inputStyle}
           onKeyDown={(e) => e.key === "Enter" && handleSave()} />
 

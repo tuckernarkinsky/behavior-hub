@@ -672,6 +672,7 @@ export default function BehaviorHubRBT() {
       <div className="font-body min-h-screen w-full flex items-center justify-center" style={{ background: c.bg }}>
         <style>{FONTS}</style>
         <div className="flex flex-col items-center gap-3">
+          <BHLogo size={56} />
           <div className="font-display text-2xl" style={{ fontWeight: 800, color: c.ink }}>Behavior Hub</div>
           <div className="text-sm" style={{ color: c.muted }}>Loading…</div>
         </div>
@@ -2070,6 +2071,30 @@ function Label({ icon: Icon, children }) {
 function BackBar({ onBack, label }) {
   return <button onClick={onBack} className="flex items-center gap-1 text-sm" style={{ color: c.muted, fontWeight: 600 }}><ArrowLeft size={16} /> {label}</button>;
 }
+function BHLogo({ size = 40 }) {
+  const uid = "bh";
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "block" }}>
+      <defs>
+        <linearGradient id={`${uid}Ocean`} x1="16" y1="12" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#38BDF8" /><stop offset=".55" stopColor="#2563EB" /><stop offset="1" stopColor="#1D4ED8" />
+        </linearGradient>
+        <linearGradient id={`${uid}Land`} x1="14" y1="14" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#4ADE80" /><stop offset="1" stopColor="#0E9F8F" />
+        </linearGradient>
+        <clipPath id={`${uid}Globe`}><circle cx="32" cy="32" r="21" /></clipPath>
+      </defs>
+      <ellipse cx="32" cy="32" rx="29.5" ry="12" fill="none" stroke="#10B981" strokeWidth="2.4" strokeOpacity=".55" transform="rotate(-24 32 32)" />
+      <circle cx="32" cy="32" r="21" fill={`url(#${uid}Ocean)`} />
+      <g clipPath={`url(#${uid}Globe)`} fill={`url(#${uid}Land)`}>
+        <path d="M11 31c2-3 6-3 9-1 2 1 3 4 6 4 4 0 6 3 4 6-2 4-7 3-10 1-4-2-5 1-8-1-3-3-3-6-1-9z" />
+        <path d="M31 13c4-2 7 1 10 1 3 0 6 0 7 4 1 4-3 6-6 5-3-1-4 1-7 0-4-1-7-2-7-6 0-3 0-8 3-9z" />
+        <path d="M36 36c3-1 6 1 6 5 0 3-2 6-6 5-3-1-4-4-3-7 1-2 1-2 3-3z" />
+      </g>
+      <ellipse cx="24" cy="22" rx="6.5" ry="3.6" fill="#fff" fillOpacity=".22" transform="rotate(-24 24 22)" />
+    </svg>
+  );
+}
 function SectionLabel({ children }) {
   return <div className="text-xs mb-2 mt-1" style={{ color: c.muted, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>{children}</div>;
 }
@@ -2403,8 +2428,9 @@ function LoginScreen({ onLogin }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 pb-10" style={{ background: c.bg }}>
       {/* Logo */}
-      <div className="mb-8 text-center">
-        <div className="font-display text-4xl mb-1" style={{ fontWeight: 900, color: c.ink, letterSpacing: -1 }}>Behavior Hub</div>
+      <div className="mb-8 flex flex-col items-center text-center">
+        <BHLogo size={72} />
+        <div className="font-display text-4xl mb-1 mt-3" style={{ fontWeight: 900, color: c.ink, letterSpacing: -1 }}>Behavior Hub</div>
         <div className="text-sm" style={{ color: c.muted }}>ABA therapy management</div>
       </div>
 

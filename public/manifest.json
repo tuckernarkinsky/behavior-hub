@@ -1,6 +1,6 @@
 {
-  "name": "Loopin",
-  "short_name": "Loopin",
+  "name": "Behavior Hub",
+  "short_name": "BehaviorHub",
   "description": "ABA therapy management for BCBA clinics",
   "start_url": "/",
   "display": "standalone",

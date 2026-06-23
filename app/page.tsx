@@ -193,7 +193,7 @@ async function loadUserProfile(supabaseUser) {
       role: data?.role ?? "RBT",
       initials: data?.initials ?? name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0,2),
       color: data?.color ?? "#0E9F8F",
-      organization: data?.organization ?? "Behavior Hub",
+      organization: data?.organization ?? "Loopin",
     };
   } catch { return { id: supabaseUser.id, email: supabaseUser.email, name: supabaseUser.email, role: "RBT", initials: "?", color: "#0E9F8F", organization: "" }; }
 }
@@ -568,7 +568,7 @@ Therapist note: "${text}"`);
 }
 
 // ================= APP =================
-export default function BehaviorHubRBT() {
+export default function LoopinApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [navTab, setNavTab]       = useState("schedule");
@@ -672,7 +672,7 @@ export default function BehaviorHubRBT() {
       <div className="font-body min-h-screen w-full flex items-center justify-center" style={{ background: c.bg }}>
         <style>{FONTS}</style>
         <div className="flex flex-col items-center gap-3">
-          <div className="font-display text-2xl" style={{ fontWeight: 800, color: c.ink }}>Behavior Hub</div>
+          <div className="font-display text-2xl" style={{ fontWeight: 800, color: c.ink }}>Loopin</div>
           <div className="text-sm" style={{ color: c.muted }}>Loading…</div>
         </div>
       </div>
@@ -1594,7 +1594,7 @@ function GlobalAIButton({ navTab, client }) {
     }
     if (navTab === "clients") return `The clinician is on the Clients screen. Active clients: ${CLIENTS.map((cl) => `${cl.name} (age ${cl.age}, ${cl.programs} programs)`).join("; ")}.`;
     if (navTab === "messages") return `The clinician is on the Messages screen — a contacts directory for messaging the team. Team members: ${Object.entries(TEAM_MEMBERS).map(([n, m]) => `${n} (${m.role})`).join(", ")}.`;
-    return "The clinician is using Behavior Hub, an ABA data collection app.";
+    return "The clinician is using Loopin, an ABA data collection app.";
   };
 
   const ask = async (input) => {
@@ -1602,7 +1602,7 @@ function GlobalAIButton({ navTab, client }) {
     if (!q) return;
     setBusy(true); setReply(""); setError("");
     try {
-      setReply(await askClaude(`You are an expert ABA clinical assistant inside Behavior Hub, a data collection app for RBTs and BCBAs. Answer concisely and clinically. Use ABA terminology correctly. If asked to draft something (message, note, letter), produce the draft directly.
+      setReply(await askClaude(`You are an expert ABA clinical assistant inside Loopin, a data collection app for RBTs and BCBAs. Answer concisely and clinically. Use ABA terminology correctly. If asked to draft something (message, note, letter), produce the draft directly.
 
 CONTEXT: ${context()}
 
@@ -2404,7 +2404,7 @@ function LoginScreen({ onLogin }) {
     <div className="min-h-screen flex flex-col items-center justify-center px-6 pb-10" style={{ background: c.bg }}>
       {/* Logo */}
       <div className="mb-8 text-center">
-        <div className="font-display text-4xl mb-1" style={{ fontWeight: 900, color: c.ink, letterSpacing: -1 }}>Behavior Hub</div>
+        <div className="font-display text-4xl mb-1" style={{ fontWeight: 900, color: c.ink, letterSpacing: -1 }}>Loopin</div>
         <div className="text-sm" style={{ color: c.muted }}>ABA therapy management</div>
       </div>
 

@@ -2418,6 +2418,21 @@ function LoginScreen({ onLogin }) {
     setView("password");
   };
 
+  // Instant demo — generates a throwaway identity and drops you straight into the app (works in any browser).
+  const handleDemo = () => {
+    const rand = Math.random().toString(36).slice(2, 8);
+    const first = ["Alex", "Sam", "Jordan", "Riley", "Casey", "Taylor"][Math.floor(Math.random() * 6)];
+    const demoEmail = `demo_${rand}@behaviorhub.app`;
+    onLogin({
+      name: `${first} (Demo)`,
+      email: demoEmail,
+      role: "RBT",
+      initials: `${first[0]}D`,
+      color: "#0E9F8F",
+      organization: "Demo Clinic",
+    });
+  };
+
   const removeAccount = (e, email) => {
     e.stopPropagation();
     removeAccountFromList(email);
@@ -2451,6 +2466,23 @@ function LoginScreen({ onLogin }) {
       </div>
 
       <div className="w-full" style={{ maxWidth: 360 }}>
+
+        {/* Instant demo — no signup, works everywhere incl. in-app browsers */}
+        {(view === "accounts") && (
+          <div className="mb-5">
+            <button onClick={handleDemo}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl active:scale-98 transition-transform"
+              style={{ background: c.primary, color: "#fff", fontWeight: 800, padding: "14px 16px", fontSize: 15, boxShadow: "0 6px 20px rgba(14,159,143,0.35)" }}>
+              <Sparkles size={17} /> Try the instant demo
+            </button>
+            <div className="text-xs text-center mt-2" style={{ color: c.muted }}>No signup — explore with sample data in one tap</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0 4px" }}>
+              <div style={{ flex: 1, height: 1, background: c.line }} />
+              <span style={{ color: c.muted, fontSize: 12 }}>or sign in</span>
+              <div style={{ flex: 1, height: 1, background: c.line }} />
+            </div>
+          </div>
+        )}
 
         {/* Saved accounts list */}
         {savedAccounts.length > 0 && view === "accounts" && (

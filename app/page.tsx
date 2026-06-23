@@ -2343,8 +2343,20 @@ function WeekCalendarView({ sessions, clients, onStartSession, onViewClient }) {
 // ============================================================
 
 // ---------------- Login Screen ----------------
+// Embedded in-app browsers (LinkedIn, Instagram, Facebook, etc.) block Google OAuth (error 403: disallowed_useragent).
+function isInAppBrowser() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV|FB_IAB|Instagram|LinkedInApp|Line\/|Twitter|Snapchat|Pinterest|MicroMessenger|; wv\)/i.test(ua);
+}
+
 function LoginScreen({ onLogin }) {
   const [view, setView]         = useState("accounts"); // accounts | email | password | signup
+  const [linkCopied, setLinkCopied] = useState(false);
+  const inApp = isInAppBrowser();
+  const copyAppLink = () => {
+    try { navigator.clipboard?.writeText(window.location.href); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2500); } catch {}
+  };
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [name, setName]         = useState("");
@@ -2383,6 +2395,10 @@ function LoginScreen({ onLogin }) {
   };
 
   const handleGoogle = async () => {
+    if (isInAppBrowser()) {
+      setError("Google sign-in is blocked inside in-app browsers like LinkedIn. Open this page in Safari or Chrome (tap the ••• menu → Open in Browser), or sign up with email below.");
+      return;
+    }
     setLoading(true); setError("");
     try {
       const { error: err } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
@@ -2458,6 +2474,19 @@ function LoginScreen({ onLogin }) {
               ))}
             </div>
             <div className="text-xs text-center mt-3 mb-4" style={{ color: c.muted }}>— or sign in with another account —</div>
+          </div>
+        )}
+
+        {/* In-app browser notice (LinkedIn / Instagram / Facebook block Google sign-in) */}
+        {inApp && (
+          <div style={{ background: c.accentSoft, border: `1px solid ${c.accent}55`, borderRadius: 12, padding: 12, marginBottom: 14 }}>
+            <div className="text-sm" style={{ color: c.ink, fontWeight: 700, marginBottom: 4 }}>Open in your browser for Google sign-in</div>
+            <div className="text-xs" style={{ color: c.muted, lineHeight: 1.5 }}>
+              You're in an in-app browser, where Google blocks sign-in. Tap the ••• menu and choose “Open in Safari/Chrome,” or just sign up with email below.
+            </div>
+            <button onClick={copyAppLink} className="text-xs mt-2" style={{ background: c.surface, border: `1px solid ${c.line}`, borderRadius: 8, padding: "6px 10px", fontWeight: 700, color: c.primary }}>
+              {linkCopied ? "Link copied ✓" : "Copy link"}
+            </button>
           </div>
         )}
 

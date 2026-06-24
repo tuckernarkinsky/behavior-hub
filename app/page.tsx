@@ -3,6 +3,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { supabase } from "./lib/supabase";
+import LandingScreen from "./LandingScreen";
 import {
   ArrowLeft, Plus, Minus, Mic, MicOff, Sparkles, FileText,
   ClipboardList, Activity, ChevronRight, TrendingUp, Loader2,
@@ -684,7 +685,7 @@ export default function BehaviorHubRBT() {
     return (
       <div className="font-body min-h-screen w-full" style={{ background: c.bg, color: c.ink }}>
         <style>{FONTS}</style>
-        <LoginScreen onLogin={login} />
+        <LandingScreen loginScreen={<LoginScreen onLogin={login} />} />
       </div>
     );
   }

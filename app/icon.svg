@@ -1,22 +1,17 @@
 <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bhOcean" x1="16" y1="12" x2="50" y2="54" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#38BDF8"/>
-      <stop offset=".55" stop-color="#2563EB"/>
-      <stop offset="1" stop-color="#1D4ED8"/>
-    </linearGradient>
-    <linearGradient id="bhLand" x1="14" y1="14" x2="48" y2="52" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#4ADE80"/>
+    <radialGradient id="g" cx="40%" cy="30%" r="78%">
+      <stop offset="0" stop-color="#2BC6B2"/>
       <stop offset="1" stop-color="#0E9F8F"/>
-    </linearGradient>
-    <clipPath id="bhGlobe"><circle cx="32" cy="32" r="21"/></clipPath>
+    </radialGradient>
   </defs>
-  <ellipse cx="32" cy="32" rx="29.5" ry="12" fill="none" stroke="#10B981" stroke-width="2.4" stroke-opacity=".55" transform="rotate(-24 32 32)"/>
-  <circle cx="32" cy="32" r="21" fill="url(#bhOcean)"/>
-  <g clip-path="url(#bhGlobe)" fill="url(#bhLand)">
-    <path d="M11 31c2-3 6-3 9-1 2 1 3 4 6 4 4 0 6 3 4 6-2 4-7 3-10 1-4-2-5 1-8-1-3-3-3-6-1-9z"/>
-    <path d="M31 13c4-2 7 1 10 1 3 0 6 0 7 4 1 4-3 6-6 5-3-1-4 1-7 0-4-1-7-2-7-6 0-3 0-8 3-9z"/>
-    <path d="M36 36c3-1 6 1 6 5 0 3-2 6-6 5-3-1-4-4-3-7 1-2 1-2 3-3z"/>
+  <ellipse cx="32" cy="32" rx="29" ry="10.5" fill="none" stroke="#F5A623" stroke-width="2.6" transform="rotate(-22 32 32)"/>
+  <circle cx="32" cy="32" r="20.5" fill="url(#g)"/>
+  <g fill="#EAFBF7">
+    <path d="M14.8 30.6c1.6-2.4 4.8-2.2 6.6-.4 1.2 1.2 1.1 3 2.8 3.6 2.3.8 2.6 3.4 1 4.8-1.8 1.6-4.4.8-6.2-.6-2-1.6-3-1-4.4-2.6-1.3-1.5-1.3-3.1.2-4.8z"/>
+    <path d="M33 17.6c2.6-1 5 .8 6.2 2.6.9 1.4 3 1.3 3.4 3.2.4 2-1.6 3.3-3.4 2.9-2.1-.5-2.6 1-4.8.4-2.3-.6-3.8-2-3.4-4.3.3-1.7.4-2.6 2-2.8z"/>
+    <path d="M36.2 36c2.2-.6 4.2 1 4 3.3-.2 2.1-2.2 3.4-4 2.6-1.6-.7-2-2.8-1.2-4.2.5-.9.9-1.4 1.2-1.7z"/>
   </g>
-  <ellipse cx="24" cy="22" rx="6.5" ry="3.6" fill="#fff" fill-opacity=".22" transform="rotate(-24 24 22)"/>
+  <ellipse cx="25" cy="22" rx="6" ry="3.2" fill="#ffffff" fill-opacity="0.25" transform="rotate(-22 25 22)"/>
+  <circle cx="9.4" cy="36.6" r="2.2" fill="#F5A623"/>
 </svg>

@@ -13,8 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://behavior-hub.vercel.app"),
   title: "Behavior Hub",
-  description: "ABA therapy management for BCBA clinics",
+  description:
+    "AI-native ABA practice management, built for the people running the session.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -22,6 +24,20 @@ export const metadata: Metadata = {
     title: "Behavior Hub",
   },
   formatDetection: { telephone: false },
+  openGraph: {
+    title: "Behavior Hub",
+    description:
+      "AI-native ABA practice management, built for the people running the session.",
+    url: "https://behavior-hub.vercel.app",
+    siteName: "Behavior Hub",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Behavior Hub",
+    description:
+      "AI-native ABA practice management, built for the people running the session.",
+  },
 };
 
 export const viewport = {
